@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "homebound-zero-trust-home"
+version = "0.1.0"
+description = "A zero-trust execution boundary for AI-powered homes"
+requires-python = ">=3.10"
+dependencies = [
+  "boto3>=1.35,<2",
+  "mcp==2.2.0",
+  "uvicorn>=0.30,<1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "pytest-asyncio>=0.23,<2"]
+
+[project.scripts]
+homebound-mcp = "app.cli.mcp_server:main"
+homebound-ask = "app.cli.ask:main"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

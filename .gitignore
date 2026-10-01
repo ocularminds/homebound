@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# HomeBound local configuration and frontend packages
+.env.*
+!.env.example
+node_modules/
+audit/
