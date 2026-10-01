@@ -4,9 +4,12 @@
 # This Policy Exchange pack is not a production policy source and is not copied
 # into tenant workspaces. Real, editable household policies live as versioned
 # org-scoped artifacts in Decionis Protocol.
-# The delivery window is the requested assumed local time window, 14:00-15:00.
-# Map the EIE proposal fields to trusted household/delivery signals in each
-# workspace. Agent or MCP arguments are not proof of identity, delivery, or time.
+# The default courier window is 14:00-18:00 in the home's local timezone.
+# The household owner can replace these bounds in their org-scoped Protocol
+# policy and publish a new home policy version. Map EIE fields to trusted
+# household/delivery signals; agent or MCP arguments are not proof.
+# Courier recognition originates at a camera; the voice assistant asks the
+# resident to confirm before submitting the action proposal.
 #
 # Rules in this pack:
 #   - Security disarm requests require a verified parent or parent escalation.
@@ -34,7 +37,7 @@ rules:
     when: "action == 'home.entry.unlock' AND target == 'side_gate'"
     decision: |
       BLOCK IF parameters.context_signals.actor == 'delivery-agent' AND parameters.context_signals.local_time < '14:00'
-      BLOCK IF parameters.context_signals.actor == 'delivery-agent' AND parameters.context_signals.local_time > '15:00'
-      ALLOW IF parameters.context_signals.actor == 'delivery-agent' AND parameters.context_signals.delivery_expected == true AND parameters.context_signals.courier_recognized == true AND parameters.context_signals.local_time >= '14:00' AND parameters.context_signals.local_time <= '15:00' AND parameters.device_parameters.unlock_duration_seconds == 30
+      BLOCK IF parameters.context_signals.actor == 'delivery-agent' AND parameters.context_signals.local_time > '18:00'
+      ALLOW IF parameters.context_signals.actor == 'delivery-agent' AND parameters.context_signals.delivery_expected == true AND parameters.context_signals.courier_recognized == true AND parameters.context_signals.recognition_source == 'camera' AND parameters.context_signals.household_confirmation == true AND parameters.context_signals.local_time >= '14:00' AND parameters.context_signals.local_time <= '18:00' AND parameters.device_parameters.unlock_duration_seconds == 30
       ESCALATE OTHERWISE
     reason_code: courier_access_requires_expected_delivery_and_authorized_window
