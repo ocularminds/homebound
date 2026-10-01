@@ -221,4 +221,4 @@ __marimo__/
 .env.*
 !.env.example
 node_modules/
-audit/
+/audit/

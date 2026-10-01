@@ -9,6 +9,8 @@ description = "A zero-trust execution boundary for AI-powered homes"
 requires-python = ">=3.10"
 dependencies = [
   "boto3>=1.35,<2",
+  "botocore[crt]>=1.35,<2",
+  "httpx2>=2.5,<3",
   "mcp==2.2.0",
   "uvicorn>=0.30,<1",
 ]

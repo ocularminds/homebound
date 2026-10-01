@@ -20,6 +20,7 @@ from urllib.request import Request, urlopen
 
 import boto3
 import httpx2
+from botocore.config import Config
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 
@@ -267,7 +268,11 @@ async def run_demo() -> int:
         await _wait_for(f"{simulator_url}/healthz", "Ring simulator", services)
         await _wait_for(f"{mcp_origin}/healthz", "MCP server", services)
 
-        runtime = boto3.client("bedrock-runtime", region_name=settings.aws_region)
+        runtime = boto3.client(
+            "bedrock-runtime",
+            region_name=settings.aws_region,
+            config=Config(retries={"max_attempts": 5, "mode": "adaptive"}),
+        )
         orchestrator = BedrockOrchestrator(
             runtime,
             settings.bedrock_model_id,

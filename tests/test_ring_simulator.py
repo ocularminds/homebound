@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -40,7 +40,7 @@ def authorized_request(**changes: object) -> dict[str, object]:
 def test_allow_mutates_state_and_records_bound_event_once(tmp_path) -> None:
     simulator = RingSimulatorAdapter(
         tmp_path / "ring.sqlite3",
-        now=lambda: datetime(2026, 10, 1, 12, 0, tzinfo=UTC),
+        now=lambda: datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc),
     )
     request = authorized_request()
 
@@ -99,7 +99,7 @@ def test_simulator_refuses_missing_authority_or_dossier_proof(tmp_path, changes,
 
 
 def test_simulator_rejects_authorization_after_expiry(tmp_path) -> None:
-    now = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
+    now = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
     simulator = RingSimulatorAdapter(tmp_path / "ring.sqlite3", now=lambda: now)
 
     with pytest.raises(SimulatorRefusal, match="AUTHORIZATION_EXPIRED"):
