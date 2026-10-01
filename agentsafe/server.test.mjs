@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ringActions, ringHandlers } from "./server.mjs";
+import { homeActions, ringHandlers } from "./server.mjs";
 
-test("registers only the three declared Ring actions", () => {
+test("registers only the three vendor-neutral home capabilities", () => {
   const registered = new Map();
   const names = ringHandlers({
     registry: {
@@ -14,8 +14,8 @@ test("registers only the three declared Ring actions", () => {
     },
   });
 
-  assert.deepEqual(names, ["unlockDoor", "disarmSystem", "viewStream"]);
-  assert.deepEqual([...registered.keys()], ringActions);
+  assert.deepEqual(names, ["home.entry.unlock", "home.security.disarm", "home.camera.view_stream"]);
+  assert.deepEqual([...registered.keys()], homeActions);
 });
 
 function fixture(verified = true) {
@@ -60,7 +60,7 @@ function fixture(verified = true) {
 const executionContext = () => ({
   intent: {
     intent: {
-      action: "unlockDoor",
+      action: "home.entry.unlock",
       target: "side_gate",
       parameters: {
         homebound_purpose: "delivery",
@@ -93,7 +93,7 @@ const executionContext = () => ({
 
 test("archives and verifies the exact dossier before the one dispatch", async () => {
   const { registered, calls } = fixture(true);
-  const result = await registered.get("unlockDoor").execute(executionContext());
+  const result = await registered.get("home.entry.unlock").execute(executionContext());
 
   assert.equal(result.result, "executed");
   assert.deepEqual(calls.map((call) => call.kind), ["credential", "evidence", "credential", "action"]);
@@ -116,7 +116,7 @@ test("an absent or invalid signed dossier prevents physical dispatch", async () 
   let dispatchCalled = false;
 
   await assert.rejects(
-    registered.get("unlockDoor").execute({
+    registered.get("home.entry.unlock").execute({
       ...executionContext(),
       dispatch: {
         async run() {
@@ -133,7 +133,7 @@ test("an absent or invalid signed dossier prevents physical dispatch", async () 
 test("action schemas reject missing or additional envelope fields", () => {
   const registered = new Map();
   ringHandlers({ registry: { register: (name, handler) => registered.set(name, handler) } });
-  const schema = registered.get("disarmSystem").parametersSchema;
+  const schema = registered.get("home.security.disarm").parametersSchema;
   assert.equal(
     schema.safeParse({
       homebound_purpose: "child requested disarm",

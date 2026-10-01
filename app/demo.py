@@ -290,7 +290,12 @@ async def run_demo() -> int:
                 {
                     "target": "home_security",
                     "reason": "home-alone child requested disarm",
-                    "context_signals": {"user": "child", "time": "15:00", "location": "home"},
+                    "context_signals": {
+                        "user": "child",
+                        "time": "15:00",
+                        "location": "home",
+                        "device_group": "security_infrastructure",
+                    },
                     "parameters": {},
                 },
                 "ESCALATE",

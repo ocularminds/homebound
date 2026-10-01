@@ -2,11 +2,14 @@ import { serve } from "@decionis/agentsafe";
 import { z } from "zod";
 import { pathToFileURL } from "node:url";
 
-export const ringActions = Object.freeze([
-  "unlockDoor",
-  "disarmSystem",
-  "viewStream",
+export const homeActionBindings = Object.freeze([
+  Object.freeze({ authorityAction: "home.entry.unlock", deviceAction: "unlockDoor" }),
+  Object.freeze({ authorityAction: "home.security.disarm", deviceAction: "disarmSystem" }),
+  Object.freeze({ authorityAction: "home.camera.view_stream", deviceAction: "viewStream" }),
 ]);
+export const homeActions = Object.freeze(
+  homeActionBindings.map(({ authorityAction }) => authorityAction),
+);
 
 const parametersSchema = z.strictObject({
   homebound_purpose: z.string().trim().min(1).max(240),
@@ -16,8 +19,8 @@ const parametersSchema = z.strictObject({
 
 /** Register simulator actions behind AgentSafe's grant claim and dispatch boundary. */
 export function ringHandlers({ registry, downstream, credential, fetch }) {
-  for (const action of ringActions) {
-    registry.register(action, {
+  for (const { authorityAction, deviceAction } of homeActionBindings) {
+    registry.register(authorityAction, {
       parametersSchema,
       execute: async ({ intent: captured, authorization, dispatch }) => {
         const intent = captured.intent;
@@ -71,7 +74,7 @@ export function ringHandlers({ registry, downstream, credential, fetch }) {
 
         return dispatch.run(async (idempotencyKey) => {
           const body = JSON.stringify({
-            action: intent.action,
+            action: deviceAction,
             target: intent.target,
             parameters: intent.parameters,
             idempotency_key: idempotencyKey,
@@ -149,7 +152,7 @@ export function ringHandlers({ registry, downstream, credential, fetch }) {
       },
     });
   }
-  return ringActions;
+  return homeActions;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
