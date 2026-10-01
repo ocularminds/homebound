@@ -20,6 +20,11 @@ from app.models.actions import ActionProposal, ActionResult
 
 LOGGER = logging.getLogger(__name__)
 JsonSender = Callable[[str, dict[str, Any]], Awaitable[tuple[int, dict[str, Any]]]]
+DECIONIS_ACTIONS = {
+    "unlockDoor": "home.entry.unlock",
+    "disarmSystem": "home.security.disarm",
+    "viewStream": "home.camera.view_stream",
+}
 
 
 class AgentSafeActionPort(ActionRequestPort):
@@ -63,7 +68,9 @@ class AgentSafeActionPort(ActionRequestPort):
 
         payload = {
             "proposal": {
-                "action": proposal.action,
+                # The official Execution Intent action-name contract is lowercase.
+                # MCP keeps its public consumer-facing camelCase tool names.
+                "action": DECIONIS_ACTIONS[proposal.action],
                 "target": proposal.target,
                 "parameters": {
                     "homebound_purpose": proposal.purpose,
@@ -238,10 +245,20 @@ class AgentSafeActionPort(ActionRequestPort):
                 authority_outcome=str(code),
                 reason_codes=(str(code),),
             )
+        safe_code = ""
+        if (
+            isinstance(code, str)
+            and code
+            and code[0].isalpha()
+            and code.isascii()
+            and code == code.upper()
+            and code.replace("_", "").isalnum()
+        ):
+            safe_code = f"_{code}"
         return cls._unavailable(
             correlation_id,
             "AgentSafe or Decionis did not return an enforceable decision. No Ring action ran.",
-            f"AGENTSAFE_HTTP_{status}",
+            f"AGENTSAFE_HTTP_{status}{safe_code}",
         )
 
     @staticmethod

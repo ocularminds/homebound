@@ -51,7 +51,10 @@ def proposal() -> ActionProposal:
         target="side_gate",
         purpose="expected high-value delivery",
         parameters={"unlock_duration_seconds": 30},
-        context_signals={"delivery_expected": True, "local_time": "14:30"},
+        context_signals={
+            "delivery_expected": True,
+            "local_time": "14:30",
+        },
         correlation_id="corr-courier-1",
         idempotency_key="idem-courier-1",
     )
@@ -91,11 +94,14 @@ async def test_posts_exact_proposal_to_agentsafe_and_never_adds_trusted_fields(
             "/v1/actions",
             {
                 "proposal": {
-                    "action": "unlockDoor",
+                    "action": "home.entry.unlock",
                     "target": "side_gate",
                     "parameters": {
                         "homebound_purpose": "expected high-value delivery",
-                        "context_signals": {"delivery_expected": True, "local_time": "14:30"},
+                        "context_signals": {
+                            "delivery_expected": True,
+                            "local_time": "14:30",
+                        },
                         "device_parameters": {"unlock_duration_seconds": 30},
                     },
                 },
@@ -194,6 +200,15 @@ async def test_non_enforcement_and_http_errors_are_not_mapped_to_allow(
     result = await port(tmp_path, unavailable).request(proposal())
     assert result.decision == "AUTHORITY_UNAVAILABLE"
     assert result.execution == "NOT_PERFORMED"
+
+    async def invalid_request(_path: str, _payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        return 400, {"code": "REQUEST_INVALID", "message": "must not reach the caller"}
+
+    invalid = await port(tmp_path, invalid_request).request(proposal())
+    assert invalid.decision == "AUTHORITY_UNAVAILABLE"
+    assert invalid.execution == "NOT_PERFORMED"
+    assert invalid.reason_codes == ("AGENTSAFE_HTTP_400_REQUEST_INVALID",)
+    assert "must not reach the caller" not in invalid.message
 
     shadow = response("ALLOW", outcome="OBSERVED", executed=False)
     shadow["mode"] = "SHADOW"

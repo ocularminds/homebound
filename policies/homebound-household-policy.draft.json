@@ -1,0 +1,201 @@
+{
+  "status": "DRAFT_NOT_SUBMITTED",
+  "purpose": "Review-only mapping of the household policy guide to vendor-neutral home capabilities and Decionis policy shape.",
+  "protocol_version": "1.0.0",
+  "bundle_id": "<assign-a-tenant-scoped-id-after-review>",
+  "org_id": "<EXECUTOR_TENANT_ID-from-local-configuration>",
+  "version": "homebound-household-policy-v1-draft",
+  "rules": [
+    {
+      "rule_id": "homebound.authenticated-parent-disarm-allow",
+      "name": "Allow a direct parent disarm request only on a trusted identity claim",
+      "decision_domain": "*",
+      "when": {
+        "all": [
+          { "field": "action", "operator": "EQ", "value": "home.security.disarm" },
+          { "field": "target", "operator": "EQ", "value": "home_security" },
+          {
+            "field": "parameters.context_signals.authenticated_user_role",
+            "operator": "EQ",
+            "value": "parent"
+          }
+        ]
+      },
+      "then": { "action": "AUTO_APPROVE", "severity": "normal" },
+      "priority": 450,
+      "enabled": false,
+      "rationale": "Mirrors the guide's parent-role override, but remains disabled until an authenticated identity provider supplies this claim independently of Bedrock/MCP arguments."
+    },
+    {
+      "rule_id": "homebound.child-disarm-escalation",
+      "name": "Require parent approval when a child requests a home security disarm",
+      "decision_domain": "*",
+      "when": {
+        "all": [
+          { "field": "action", "operator": "EQ", "value": "home.security.disarm" },
+          { "field": "target", "operator": "EQ", "value": "home_security" },
+          { "field": "parameters.context_signals.user", "operator": "EQ", "value": "child" },
+          { "field": "parameters.context_signals.location", "operator": "EQ", "value": "home" },
+          {
+            "field": "parameters.context_signals.device_group",
+            "operator": "EQ",
+            "value": "security_infrastructure"
+          }
+        ]
+      },
+      "then": {
+        "action": "ESCALATE",
+        "severity": "elevated",
+        "authority": {
+          "reason_codes": ["HUMAN_APPROVAL_REQUIRED"],
+          "selector": { "kind": "ROLE", "role_id": "APPROVER" },
+          "verification_requirements": {
+            "level": "HIGH_CONFIDENCE",
+            "methods": ["WEBAUTHN", "ACTIVE_LIVENESS"],
+            "hardware_pki_required": false,
+            "disallow_virtual_cameras": true
+          },
+          "resolution": {
+            "quorum": 1,
+            "delegation": "DISALLOWED",
+            "fallback_role_ids": []
+          },
+          "expires_in_seconds": 60
+        }
+      },
+      "priority": 400,
+      "enabled": true,
+      "rationale": "A child's request to disarm home security requires a parent to complete Decionis-managed Presence verification. No execution grant exists before Decionis reauthorizes the unchanged intent."
+    },
+    {
+      "rule_id": "homebound.courier-unlock-in-window",
+      "name": "Allow expected recognized courier at the side gate during the authorized window",
+      "decision_domain": "*",
+      "when": {
+        "all": [
+          { "field": "action", "operator": "EQ", "value": "home.entry.unlock" },
+          { "field": "target", "operator": "EQ", "value": "side_gate" },
+          {
+            "field": "parameters.context_signals.actor",
+            "operator": "EQ",
+            "value": "delivery-agent"
+          },
+          {
+            "field": "parameters.context_signals.delivery_expected",
+            "operator": "EQ",
+            "value": true
+          },
+          {
+            "field": "parameters.context_signals.courier_recognized",
+            "operator": "EQ",
+            "value": true
+          },
+          {
+            "field": "parameters.context_signals.local_time",
+            "operator": "GTE",
+            "value": "14:00"
+          },
+          {
+            "field": "parameters.context_signals.local_time",
+            "operator": "LTE",
+            "value": "15:00"
+          },
+          {
+            "field": "parameters.device_parameters.unlock_duration_seconds",
+            "operator": "EQ",
+            "value": 30
+          }
+        ]
+      },
+      "then": { "action": "AUTO_APPROVE", "severity": "normal" },
+      "priority": 300,
+      "enabled": true,
+      "rationale": "Identity and delivery intent are insufficient on their own; this bounded unlock also requires a local-time value inside the configured household window."
+    },
+    {
+      "rule_id": "homebound.courier-unlock-outside-window",
+      "name": "Block an otherwise recognized courier outside the authorized window",
+      "decision_domain": "*",
+      "when": {
+        "all": [
+          { "field": "action", "operator": "EQ", "value": "home.entry.unlock" },
+          { "field": "target", "operator": "EQ", "value": "side_gate" },
+          {
+            "field": "parameters.context_signals.actor",
+            "operator": "EQ",
+            "value": "delivery-agent"
+          },
+          {
+            "field": "parameters.context_signals.delivery_expected",
+            "operator": "EQ",
+            "value": true
+          },
+          {
+            "field": "parameters.context_signals.courier_recognized",
+            "operator": "EQ",
+            "value": true
+          },
+          {
+            "field": "parameters.context_signals.local_time",
+            "operator": "GT",
+            "value": "15:00"
+          }
+        ]
+      },
+      "then": { "action": "AUTO_REJECT", "severity": "urgent" },
+      "priority": 350,
+      "enabled": true,
+      "rationale": "Block the side-gate unlock after 15:00 local household time, even when the courier is expected and recognized. The policy owner must confirm the tenant's stable reason-code mapping before publication."
+    },
+    {
+      "rule_id": "homebound.courier-unlock-before-window",
+      "name": "Block an otherwise recognized courier before the authorized window",
+      "decision_domain": "*",
+      "when": {
+        "all": [
+          { "field": "action", "operator": "EQ", "value": "home.entry.unlock" },
+          { "field": "target", "operator": "EQ", "value": "side_gate" },
+          {
+            "field": "parameters.context_signals.actor",
+            "operator": "EQ",
+            "value": "delivery-agent"
+          },
+          {
+            "field": "parameters.context_signals.delivery_expected",
+            "operator": "EQ",
+            "value": true
+          },
+          {
+            "field": "parameters.context_signals.courier_recognized",
+            "operator": "EQ",
+            "value": true
+          },
+          {
+            "field": "parameters.context_signals.local_time",
+            "operator": "LT",
+            "value": "14:00"
+          }
+        ]
+      },
+      "then": { "action": "AUTO_REJECT", "severity": "urgent" },
+      "priority": 350,
+      "enabled": true,
+      "rationale": "Block the side-gate unlock before 14:00 local household time, even when the courier is expected and recognized."
+    }
+  ],
+  "metadata": {
+    "author": "HomeBound",
+    "review_status": "PENDING_REVIEW",
+    "local_draft_only": true,
+    "source_policy_guide": "Child requests to disable security require parental Presence sign-off; parent approval is role-bound; courier access is limited by target, exact action, context, and time.",
+    "unresolved_before_submission": [
+      "Confirm Decionis field-path resolution and GTE/LTE handling for AgentSafe action parameters against a dry-run in this tenant.",
+      "Confirm that the policy's 14:00–15:00 local-time window matches the household's intended schedule and timezone.",
+      "Bind local_time, courier identity, and expected-delivery status to trusted sources; the demo fixture alone is not proof.",
+      "Bind the APPROVER role to the enrolled parent principal in Decionis/Presence; do not assume an email address is a Presence principal ID.",
+      "Confirm that the Decionis policy editor accepts the HIGH_CONFIDENCE and ACTIVE_LIVENESS verification requirements.",
+      "Confirm a stable Decionis denial reason code for OUTSIDE_AUTHORIZED_DELIVERY_WINDOW.",
+      "The direct parent-role override is present but disabled until HomeBound receives an authenticated parent identity claim; the Presence-approved resume is the current parent path."
+    ]
+  }
+}
