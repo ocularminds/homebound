@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from mcp import Client
 from app.adapters.ring_mcp import RingMcpServer
+from app.models.actions import ActionProposal, ActionResult
 
 
 @pytest.mark.asyncio
@@ -50,3 +51,32 @@ def test_ring_tools_do_not_import_or_construct_a_ring_client() -> None:
     )
     assert "RingExecutionPort" not in source
     assert "ring_sdk" not in source.lower()
+
+
+@pytest.mark.asyncio
+async def test_saved_presence_resume_is_exposed_only_when_interception_supports_it() -> None:
+    class ResumePort:
+        async def request(self, proposal: ActionProposal) -> ActionResult:
+            return ActionResult(
+                decision="ESCALATE",
+                execution="NOT_PERFORMED",
+                message="approval pending",
+                correlation_id=proposal.correlation_id,
+            )
+
+        async def resume(self, correlation_id: str) -> ActionResult:
+            return ActionResult(
+                decision="ALLOW",
+                execution="PERFORMED",
+                message="approved action executed",
+                correlation_id=correlation_id,
+            )
+
+    ring_server = RingMcpServer(ResumePort())
+    async with Client(ring_server.server) as client:
+        listed = await client.list_tools()
+        assert "resumeEscalation" in {tool.name for tool in listed.tools}
+        resumed = await client.call_tool("resumeEscalation", {"correlation_id": "corr-1"})
+
+    assert resumed.structured_content["decision"] == "ALLOW"
+    assert resumed.structured_content["execution"] == "PERFORMED"

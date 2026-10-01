@@ -7,10 +7,11 @@
   },
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check server.mjs && node --test"
+    "check": "node --check server.mjs && node --check dossier-archive.mjs && node --check dossier-archive-server.mjs && node --test"
   },
   "dependencies": {
     "@decionis/agentsafe": "0.2.5",
+    "@decionis/verify": "0.4.0",
     "zod": "4.5.4"
   }
 }

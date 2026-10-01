@@ -20,4 +20,23 @@ set -a
 set +a
 export EXECUTOR_JOURNAL_DIR="${EXECUTOR_JOURNAL_DIR:-$PROJECT_ROOT/audit/agentsafe}"
 mkdir -p "$EXECUTOR_JOURNAL_DIR"
-exec node "$PROJECT_ROOT/agentsafe/server.mjs"
+export HOMEBOUND_DOSSIER_ARCHIVE_DIRECTORY="${HOMEBOUND_DOSSIER_ARCHIVE_DIRECTORY:-$PROJECT_ROOT/audit/dossiers}"
+
+node "$PROJECT_ROOT/agentsafe/dossier-archive-server.mjs" &
+ARCHIVE_PID=$!
+EXECUTOR_PID=""
+cleanup() {
+  if [ -n "$EXECUTOR_PID" ]; then kill "$EXECUTOR_PID" 2>/dev/null || true; fi
+  kill "$ARCHIVE_PID" 2>/dev/null || true
+  if [ -n "$EXECUTOR_PID" ]; then wait "$EXECUTOR_PID" 2>/dev/null || true; fi
+  wait "$ARCHIVE_PID" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+node "$PROJECT_ROOT/agentsafe/server.mjs" &
+EXECUTOR_PID=$!
+set +e
+wait "$EXECUTOR_PID"
+STATUS=$?
+set -e
+exit "$STATUS"

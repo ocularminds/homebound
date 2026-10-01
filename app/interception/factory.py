@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from app.audit.action_log import ActionAuditLog
+from app.audit.dossier_archive import DossierArchiveClient
 from app.audit.pending_escalations import PendingEscalationStore
 from app.config.settings import Settings
 from app.interception.agentsafe_http import AgentSafeActionPort
@@ -19,8 +21,24 @@ def action_request_port(settings: Settings) -> ActionRequestPort:
             "HOMEBOUND_AGENTSAFE_URL and HOMEBOUND_AGENTSAFE_BEARER_TOKEN must be set together"
         )
     database = Path(settings.audit_directory) / "pending-escalations.sqlite3"
+    if (settings.dossier_archiver_endpoint is None) != (
+        settings.dossier_archiver_bearer_token is None
+    ):
+        raise ValueError(
+            "HOMEBOUND_DOSSIER_ARCHIVER_URL and HOMEBOUND_DOSSIER_ARCHIVER_TOKEN must be set together"
+        )
+    dossier_archiver = (
+        DossierArchiveClient(
+            settings.dossier_archiver_endpoint,
+            settings.dossier_archiver_bearer_token,
+        )
+        if settings.dossier_archiver_endpoint and settings.dossier_archiver_bearer_token
+        else None
+    )
     return AgentSafeActionPort(
         settings.agentsafe_endpoint,
         settings.agentsafe_bearer_token,
         PendingEscalationStore(database),
+        dossier_archiver=dossier_archiver,
+        audit_log=ActionAuditLog(Path(settings.audit_directory) / "actions.jsonl"),
     )

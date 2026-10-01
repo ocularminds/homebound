@@ -6,11 +6,14 @@ import asyncio
 import logging
 import sqlite3
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpx2
 
+from app.audit.action_log import ActionAuditLog
+from app.audit.dossier_archive import DossierArchiveClient
 from app.audit.pending_escalations import PendingEscalationStore
 from app.interception.ports import ActionRequestPort
 from app.models.actions import ActionProposal, ActionResult
@@ -28,6 +31,8 @@ class AgentSafeActionPort(ActionRequestPort):
         bearer_token: str,
         pending_escalations: PendingEscalationStore,
         *,
+        dossier_archiver: DossierArchiveClient | None = None,
+        audit_log: ActionAuditLog | None = None,
         sender: JsonSender | None = None,
         transport_factory: Callable[[], httpx2.AsyncBaseTransport] | None = None,
         timeout_seconds: float = 20.0,
@@ -47,6 +52,8 @@ class AgentSafeActionPort(ActionRequestPort):
         self._endpoint = endpoint.rstrip("/")
         self._bearer_token = bearer_token
         self._pending = pending_escalations
+        self._dossier_archiver = dossier_archiver
+        self._audit_log = audit_log
         self._sender = sender
         self._transport_factory = transport_factory
         self._timeout_seconds = timeout_seconds
@@ -75,10 +82,13 @@ class AgentSafeActionPort(ActionRequestPort):
         if result.decision == "ESCALATE":
             handoff = body.get("escalation")
             if not isinstance(handoff, dict):
-                return self._unavailable(
-                    proposal.correlation_id,
-                    "AgentSafe returned an escalation without a resumable handoff.",
-                    "ESCALATION_HANDOFF_MISSING",
+                return await self._finish(
+                    proposal,
+                    self._unavailable(
+                        proposal.correlation_id,
+                        "AgentSafe returned an escalation without a resumable handoff.",
+                        "ESCALATION_HANDOFF_MISSING",
+                    ),
                 )
             try:
                 await asyncio.to_thread(
@@ -93,12 +103,15 @@ class AgentSafeActionPort(ActionRequestPort):
                     proposal.correlation_id,
                     type(error).__name__,
                 )
-                return self._unavailable(
-                    proposal.correlation_id,
-                    "Decionis opened an approval request, but HomeBound could not save its resume state.",
-                    "ESCALATION_HANDOFF_NOT_PERSISTED",
+                return await self._finish(
+                    proposal,
+                    self._unavailable(
+                        proposal.correlation_id,
+                        "Decionis opened an approval request, but HomeBound could not save its resume state.",
+                        "ESCALATION_HANDOFF_NOT_PERSISTED",
+                    ),
                 )
-        return result
+        return await self._finish(proposal, result)
 
     async def resume(self, correlation_id: str) -> ActionResult:
         """Present the saved handoff unchanged; AgentSafe rechecks the intent."""
@@ -113,7 +126,7 @@ class AgentSafeActionPort(ActionRequestPort):
         status, body = await self._post("/v1/escalations", pending.handoff)
         if status == 409 and body.get("code") == "INTENT_EXPIRED":
             await asyncio.to_thread(self._pending.close, correlation_id, "EXPIRED")
-            return ActionResult(
+            result = ActionResult(
                 decision="BLOCK",
                 execution="NOT_PERFORMED",
                 message="The approval window expired. No Ring action was executed.",
@@ -121,6 +134,7 @@ class AgentSafeActionPort(ActionRequestPort):
                 authority_outcome="INTENT_EXPIRED",
                 reason_codes=("INTENT_EXPIRED",),
             )
+            return await self._finish(_proposal_from_dict(pending.proposal), result)
         if not 200 <= status < 300:
             return self._http_refusal(status, body, correlation_id)
 
@@ -140,6 +154,51 @@ class AgentSafeActionPort(ActionRequestPort):
         else:
             terminal = "RESOLVED" if result.decision == "ALLOW" else "DENIED"
             await asyncio.to_thread(self._pending.close, correlation_id, terminal)
+        return await self._finish(_proposal_from_dict(pending.proposal), result)
+
+    async def _finish(self, proposal: ActionProposal, result: ActionResult) -> ActionResult:
+        """Archive proof for any returned dossier and append its local action record."""
+
+        evidence = result.dossier_evidence
+        event_evidence = (
+            result.execution_event.get("dossier_evidence")
+            if result.execution_event is not None
+            else None
+        )
+        if isinstance(event_evidence, dict) and event_evidence.get("verified") is True:
+            evidence = event_evidence
+        elif result.dossier_id and self._dossier_archiver is not None:
+            try:
+                evidence = await asyncio.to_thread(
+                    self._dossier_archiver.archive,
+                    result.dossier_id,
+                    result.correlation_id,
+                )
+            except Exception as error:
+                LOGGER.warning(
+                    "Decision Dossier archive unavailable dossier_id=%s error_type=%s",
+                    result.dossier_id,
+                    type(error).__name__,
+                )
+                evidence = {
+                    "dossier_id": result.dossier_id,
+                    "correlation_id": result.correlation_id,
+                    "verified": False,
+                    "error_code": "DOSSIER_ARCHIVE_UNAVAILABLE",
+                }
+        result = replace(result, dossier_evidence=evidence)
+
+        if self._audit_log is not None:
+            try:
+                await asyncio.to_thread(self._audit_log.append, proposal, result, evidence)
+                result = replace(result, audit_recorded=True)
+            except (OSError, ValueError, TypeError, sqlite3.Error) as error:
+                LOGGER.error(
+                    "action audit record could not be persisted correlation_id=%s error_type=%s",
+                    proposal.correlation_id,
+                    type(error).__name__,
+                )
+                result = replace(result, audit_recorded=False)
         return result
 
     async def _post(self, path: str, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
@@ -195,18 +254,23 @@ class AgentSafeActionPort(ActionRequestPort):
         reason_codes = tuple(
             item for item in body.get("reason_codes", []) if isinstance(item, str)
         ) if isinstance(body.get("reason_codes"), list) else ()
+        authorization = body.get("authorization")
+        authorization = authorization if isinstance(authorization, dict) else {}
         escalation = body.get("escalation")
         escalation_id, expires_at = _escalation_fields(escalation)
         common = {
             "correlation_id": correlation_id,
             "decision_id": decision_id,
             "dossier_id": dossier_id,
+            "grant_id": _optional_string(authorization.get("grant_id")),
+            "authorization_expires_at": _optional_string(authorization.get("expires_at")),
             "intent_id": _optional_string(body.get("intent_id")),
             "intent_hash": _optional_string(body.get("intent_hash")),
             "authority_outcome": _optional_string(outcome),
             "reason_codes": reason_codes,
             "escalation_id": escalation_id,
             "escalation_expires_at": expires_at,
+            "execution_event": _optional_dict(body.get("result")),
         }
 
         if mode != "ENFORCEMENT" or body.get("fail_closed") is True or verdict is None:
@@ -270,6 +334,23 @@ class AgentSafeActionPort(ActionRequestPort):
 
 def _optional_string(value: Any) -> str | None:
     return value if isinstance(value, str) else None
+
+
+def _optional_dict(value: Any) -> dict[str, Any] | None:
+    return value if isinstance(value, dict) else None
+
+
+def _proposal_from_dict(value: dict[str, Any]) -> ActionProposal:
+    return ActionProposal(
+        action=value["action"],
+        target=value["target"],
+        purpose=value["purpose"],
+        parameters=value.get("parameters", {}),
+        context_signals=value.get("context_signals", {}),
+        correlation_id=value["correlation_id"],
+        idempotency_key=value["idempotency_key"],
+        captured_at=value["captured_at"],
+    )
 
 
 def _escalation_fields(value: Any) -> tuple[str | None, str | None]:

@@ -20,6 +20,8 @@ class Settings:
     agentsafe_endpoint: str | None = None
     agentsafe_bearer_token: str | None = None
     audit_directory: str = "audit"
+    dossier_archiver_endpoint: str | None = None
+    dossier_archiver_bearer_token: str | None = None
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -51,4 +53,6 @@ class Settings:
             agentsafe_endpoint=os.getenv("HOMEBOUND_AGENTSAFE_URL") or None,
             agentsafe_bearer_token=os.getenv("HOMEBOUND_AGENTSAFE_BEARER_TOKEN") or None,
             audit_directory=os.getenv("HOMEBOUND_AUDIT_DIRECTORY", "audit"),
+            dossier_archiver_endpoint=os.getenv("HOMEBOUND_DOSSIER_ARCHIVER_URL") or None,
+            dossier_archiver_bearer_token=os.getenv("HOMEBOUND_DOSSIER_ARCHIVER_TOKEN") or None,
         )

@@ -10,6 +10,7 @@ from typing import Any
 import httpx2
 import pytest
 
+from app.audit.action_log import ActionAuditLog
 from app.audit.pending_escalations import PendingEscalationStore
 from app.interception.agentsafe_http import AgentSafeActionPort
 from app.models.actions import ActionProposal
@@ -30,6 +31,12 @@ def response(
         "verdict": verdict,
         "decision_id": "decision-001",
         "dossier_id": "dossier-001",
+        "authorization": {
+            "decision_id": "decision-001",
+            "dossier_id": "dossier-001",
+            "grant_id": "grant-001",
+            "expires_at": "2030-01-01T00:00:00Z",
+        },
         "reason_codes": reason_codes or [],
         "fail_closed": False,
         "outcome": outcome,
@@ -77,6 +84,8 @@ async def test_posts_exact_proposal_to_agentsafe_and_never_adds_trusted_fields(
     assert result.decision == "ALLOW"
     assert result.execution == "NOT_PERFORMED"
     assert result.dossier_id == "dossier-001"
+    assert result.grant_id == "grant-001"
+    assert result.authorization_expires_at == "2030-01-01T00:00:00Z"
     assert calls == [
         (
             "/v1/actions",
@@ -195,6 +204,116 @@ async def test_non_enforcement_and_http_errors_are_not_mapped_to_allow(
     result = await port(tmp_path, observe_only).request(proposal())
     assert result.decision == "AUTHORITY_UNAVAILABLE"
     assert result.execution == "NOT_PERFORMED"
+
+
+@pytest.mark.asyncio
+async def test_expired_presence_handoff_is_closed_as_block_without_execution(tmp_path: Path) -> None:
+    handoff = {
+        "mode": "MANAGED",
+        "intent": {"intentId": "intent-001", "expiresAt": "2026-10-01T00:00:00Z"},
+        "escalation": {"escalationId": "presence-1", "status": "AWAITING_APPROVER"},
+    }
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def sender(path: str, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        calls.append((path, payload))
+        if path == "/v1/actions":
+            return 200, response(
+                "ESCALATE", outcome="ESCALATE_PENDING", executed=False, escalation=handoff
+            )
+        return 409, {"code": "INTENT_EXPIRED"}
+
+    action_port = port(tmp_path, sender)
+    initial = await action_port.request(proposal())
+    expired = await action_port.resume(initial.correlation_id)
+
+    assert initial.decision == "ESCALATE"
+    assert expired.decision == "BLOCK"
+    assert expired.execution == "NOT_PERFORMED"
+    assert expired.authority_outcome == "INTENT_EXPIRED"
+    assert calls[1] == ("/v1/escalations", handoff)
+    assert action_port._pending.get(initial.correlation_id) is None
+
+
+@pytest.mark.asyncio
+async def test_dossier_evidence_and_local_action_record_are_retained(tmp_path: Path) -> None:
+    class ArchiveFixture:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+
+        def archive(self, dossier_id: str, correlation_id: str) -> dict[str, Any]:
+            self.calls.append((dossier_id, correlation_id))
+            return {
+                "dossier_id": dossier_id,
+                "correlation_id": correlation_id,
+                "reference": "dossier-archive-ref",
+                "verified": True,
+                "signature_verified": True,
+                "trust_anchor": "DECIONIS_OFFICIAL",
+            }
+
+    async def sender(_path: str, _payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        return 200, response("BLOCK", outcome="BLOCKED", executed=False)
+
+    archive = ArchiveFixture()
+    action_log = ActionAuditLog(tmp_path / "audit" / "actions.jsonl")
+    action_port = AgentSafeActionPort(
+        "http://127.0.0.1:8100",
+        "local-caller-token-not-a-production-secret",
+        PendingEscalationStore(tmp_path / "audit" / "pending.sqlite3"),
+        dossier_archiver=archive,  # type: ignore[arg-type]
+        audit_log=action_log,
+        sender=sender,
+    )
+
+    result = await action_port.request(proposal())
+
+    assert result.decision == "BLOCK"
+    assert result.execution == "NOT_PERFORMED"
+    assert result.dossier_evidence["verified"] is True
+    assert result.audit_recorded is True
+    assert archive.calls == [("dossier-001", "corr-courier-1")]
+    saved = json.loads((tmp_path / "audit" / "actions.jsonl").read_text())
+    assert saved["proposal"]["target"] == "side_gate"
+    assert saved["result"]["authority_outcome"] == "BLOCKED"
+    assert saved["dossier_evidence"]["signature_verified"] is True
+
+
+@pytest.mark.asyncio
+async def test_dossier_archive_failure_still_records_fail_closed_governance_audit(
+    tmp_path: Path,
+) -> None:
+    class FailingArchive:
+        def archive(self, _dossier_id: str, _correlation_id: str) -> dict[str, Any]:
+            raise RuntimeError("connection refused")
+
+    async def sender(_path: str, _payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        return 200, response("BLOCK", outcome="BLOCKED", executed=False)
+
+    log = ActionAuditLog(tmp_path / "audit" / "actions.jsonl")
+    action_port = AgentSafeActionPort(
+        "http://127.0.0.1:8100",
+        "local-caller-token-not-a-production-secret",
+        PendingEscalationStore(tmp_path / "audit" / "pending.sqlite3"),
+        dossier_archiver=FailingArchive(),  # type: ignore[arg-type]
+        audit_log=log,
+        sender=sender,
+    )
+
+    result = await action_port.request(proposal())
+
+    assert result.decision == "BLOCK"
+    assert result.execution == "NOT_PERFORMED"
+    assert result.dossier_evidence == {
+        "dossier_id": "dossier-001",
+        "correlation_id": "corr-courier-1",
+        "verified": False,
+        "error_code": "DOSSIER_ARCHIVE_UNAVAILABLE",
+    }
+    assert result.audit_recorded is True
+    saved = json.loads((tmp_path / "audit" / "actions.jsonl").read_text())
+    assert saved["result"]["decision"] == "BLOCK"
+    assert saved["dossier_evidence"]["verified"] is False
 
 
 @pytest.mark.asyncio

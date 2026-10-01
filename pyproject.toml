@@ -20,6 +20,7 @@ dev = ["pytest>=8,<10", "pytest-asyncio>=0.23,<2"]
 homebound-mcp = "app.cli.mcp_server:main"
 homebound-ask = "app.cli.ask:main"
 homebound-resume-escalation = "app.cli.resume_escalation:main"
+homebound-ring-simulator = "app.cli.ring_simulator:main"
 
 [tool.setuptools.packages.find]
 include = ["app*"]

@@ -14,16 +14,138 @@ const parametersSchema = z.strictObject({
   device_parameters: z.record(z.string(), z.unknown()),
 });
 
-/** Register HomeBound's fixed actions in the official AgentSafe executor. */
-export function ringHandlers({ registry }) {
+/** Register simulator actions behind AgentSafe's grant claim and dispatch boundary. */
+export function ringHandlers({ registry, downstream, credential, fetch }) {
   for (const action of ringActions) {
     registry.register(action, {
       parametersSchema,
-      // Phase 2 validates the real authority and approval path. The only
-      // physical handler lands in Phase 3; failing before dispatch means an
-      // ALLOW cannot accidentally call an unconfigured Ring service.
-      execute: async () => {
-        throw new Error("RING_SIMULATOR_NOT_ATTACHED_PHASE_2");
+      execute: async ({ intent: captured, authorization, dispatch }) => {
+        const intent = captured.intent;
+        if (!downstream.lookupUrl?.includes("{idempotency_key}")) {
+          throw new Error("RING_SIMULATOR_LOOKUP_URL_NOT_CONFIGURED");
+        }
+        const evidenceUrl = new URL(
+          downstream.lookupUrl.replace(
+            "{idempotency_key}",
+            encodeURIComponent(authorization.dossierId),
+          ),
+        );
+        const evidenceHeaders = await credential.headersFor({
+          method: "POST",
+          url: evidenceUrl.toString(),
+          body: null,
+          idempotencyKey: intent.idempotencyKey,
+          intentHash: captured.intentHash,
+          grant: {
+            id: authorization.grantId,
+            decisionId: authorization.decisionId,
+            ...(authorization.claimAttestation
+              ? { claimAttestation: authorization.claimAttestation }
+              : {}),
+          },
+        });
+        const evidenceResponse = await fetch(evidenceUrl, {
+          method: "POST",
+          headers: {
+            ...evidenceHeaders,
+            accept: "application/json",
+            "idempotency-key": intent.idempotencyKey,
+            "x-agent-safe-decision-id": authorization.decisionId,
+            "x-agent-safe-dossier-id": authorization.dossierId,
+            "x-agent-safe-grant-id": authorization.grantId,
+            "x-agent-safe-intent-hash": captured.intentHash,
+            "x-homebound-correlation-id": intent.correlationId ?? "",
+            ...(authorization.claimAttestation
+              ? { "x-agent-safe-claim-attestation": authorization.claimAttestation }
+              : {}),
+          },
+          redirect: "error",
+        });
+        const receivedEvidence = await evidenceResponse.json().catch(() => ({}));
+        const evidence = receivedEvidence && typeof receivedEvidence === "object"
+          ? receivedEvidence
+          : {};
+        if (!evidenceResponse.ok || evidence.verified !== true || evidence.dossier_id !== authorization.dossierId) {
+          throw new Error("DECISION_DOSSIER_NOT_VERIFIED_BEFORE_DISPATCH");
+        }
+
+        return dispatch.run(async (idempotencyKey) => {
+          const body = JSON.stringify({
+            action: intent.action,
+            target: intent.target,
+            parameters: intent.parameters,
+            idempotency_key: idempotencyKey,
+            correlation_id: intent.correlationId ?? "",
+            intent_id: intent.intentId,
+            intent_hash: captured.intentHash,
+            decision_id: authorization.decisionId,
+            dossier_id: authorization.dossierId,
+            grant_id: authorization.grantId,
+            authorization_expires_at: authorization.expiresAt,
+            claim_attestation: authorization.claimAttestation ?? null,
+            dossier_evidence: {
+              verified: true,
+              reference: evidence.reference,
+              trust_anchor: evidence.trust_anchor,
+            },
+          });
+          const headers = await credential.headersFor({
+            method: "POST",
+            url: downstream.url,
+            body,
+            idempotencyKey,
+            intentHash: captured.intentHash,
+            grant: {
+              id: authorization.grantId,
+              decisionId: authorization.decisionId,
+              ...(authorization.claimAttestation
+                ? { claimAttestation: authorization.claimAttestation }
+                : {}),
+            },
+          });
+          const response = await fetch(downstream.url, {
+            method: "POST",
+            headers: {
+              ...headers,
+              accept: "application/json",
+              "content-type": "application/json",
+              "idempotency-key": idempotencyKey,
+              "x-agent-safe-decision-id": authorization.decisionId,
+              "x-agent-safe-dossier-id": authorization.dossierId,
+              "x-agent-safe-grant-id": authorization.grantId,
+              "x-agent-safe-authorization-expires-at": authorization.expiresAt,
+              "x-agent-safe-intent-id": intent.intentId,
+              "x-agent-safe-intent-hash": captured.intentHash,
+              "x-homebound-correlation-id": intent.correlationId ?? "",
+              ...(authorization.claimAttestation
+                ? { "x-agent-safe-claim-attestation": authorization.claimAttestation }
+                : {}),
+            },
+            body,
+            redirect: "error",
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error("RING_SIMULATOR_REFUSED_EXECUTION");
+          }
+          return result;
+        });
+      },
+      reconcile: async ({ idempotencyKey }) => {
+        if (!downstream.lookupUrl?.includes("{idempotency_key}")) {
+          return { status: "UNKNOWN" };
+        }
+        const lookup = new URL(
+          downstream.lookupUrl.replace("{idempotency_key}", encodeURIComponent(idempotencyKey)),
+        );
+        const response = await fetch(lookup, { method: "GET", redirect: "error" });
+        if (response.status === 404) return { status: "NOT_EXECUTED" };
+        if (!response.ok) return { status: "UNKNOWN" };
+        const result = await response.json().catch(() => null);
+        if (!result || typeof result !== "object" || result.result !== "executed") {
+          return { status: "UNKNOWN" };
+        }
+        return { status: "COMPLETED", result };
       },
     });
   }

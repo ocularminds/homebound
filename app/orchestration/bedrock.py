@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import Any, AsyncIterator, Protocol
+from typing import Any, AsyncIterator, Callable, Protocol
 
 import httpx2
 from mcp import Client
@@ -35,14 +35,22 @@ class BedrockOrchestrator:
         mcp_endpoint: str,
         mcp_bearer_token: str | None = None,
         max_tool_rounds: int = 4,
+        max_tool_calls_per_response: int = 4,
     ) -> None:
         self._runtime = runtime
         self._model_id = model_id
         self._mcp_endpoint = mcp_endpoint
         self._mcp_bearer_token = mcp_bearer_token
         self._max_tool_rounds = max_tool_rounds
+        self._max_tool_calls_per_response = max_tool_calls_per_response
 
-    async def respond(self, prompt: str) -> str:
+    async def respond(
+        self,
+        prompt: str,
+        *,
+        trace: list[dict[str, Any]] | None = None,
+        tool_call_validator: Callable[[str, dict[str, Any]], bool] | None = None,
+    ) -> str:
         """Get a natural-language response after any requested MCP tools return."""
 
         async with self._connect_mcp() as client:
@@ -62,6 +70,7 @@ class BedrockOrchestrator:
             messages: list[dict[str, Any]] = [
                 {"role": "user", "content": [{"text": prompt}]}
             ]
+            tool_call_count = 0
 
             for _ in range(self._max_tool_rounds):
                 response = await self._converse(messages, tool_config)
@@ -75,7 +84,61 @@ class BedrockOrchestrator:
                     use = block.get("toolUse")
                     if use is None:
                         continue
-                    result = await client.call_tool(use["name"], use.get("input", {}))
+                    if tool_call_count >= self._max_tool_calls_per_response:
+                        if trace is not None:
+                            trace.append(
+                                {
+                                    "name": use["name"],
+                                    "arguments": use.get("input", {}),
+                                    "invoked": False,
+                                    "reason": "TOOL_CALL_LIMIT_REACHED",
+                                }
+                            )
+                        tool_results.append(
+                            {
+                                "toolResult": {
+                                    "toolUseId": use["toolUseId"],
+                                    "status": "error",
+                                    "content": [{"text": "The action request limit was reached."}],
+                                }
+                            }
+                        )
+                        continue
+                    arguments = use.get("input", {})
+                    if tool_call_validator is not None and not tool_call_validator(
+                        use["name"], arguments
+                    ):
+                        if trace is not None:
+                            trace.append(
+                                {
+                                    "name": use["name"],
+                                    "arguments": arguments,
+                                    "invoked": False,
+                                    "reason": "SCENARIO_INPUT_MISMATCH",
+                                }
+                            )
+                        tool_results.append(
+                            {
+                                "toolResult": {
+                                    "toolUseId": use["toolUseId"],
+                                    "status": "error",
+                                    "content": [{"text": "The scripted tool arguments did not match the scenario fixture."}],
+                                }
+                            }
+                        )
+                        continue
+                    tool_call_count += 1
+                    result = await client.call_tool(use["name"], arguments)
+                    if trace is not None:
+                        trace.append(
+                            {
+                                "name": use["name"],
+                                "arguments": arguments,
+                                "invoked": True,
+                                "result": self._trace_result(result),
+                                "is_error": result.is_error,
+                            }
+                        )
                     tool_results.append(self._bedrock_tool_result(use["toolUseId"], result))
                 if not tool_results:
                     raise RuntimeError("Bedrock requested tool use without a tool call")
@@ -146,3 +209,12 @@ class BedrockOrchestrator:
             for block in message.get("content", [])
             if isinstance(block, dict) and "text" in block
         ).strip()
+
+    @staticmethod
+    def _trace_result(result: CallToolResult) -> dict[str, Any] | str:
+        if result.structured_content is not None:
+            return result.structured_content
+        text = "\n".join(
+            block.text for block in result.content if isinstance(block, TextContent)
+        )
+        return text
