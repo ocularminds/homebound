@@ -27,7 +27,7 @@ Work is delivered in stacked pull requests:
 
 1. [Phase 1 — Bedrock orchestration and MCP](https://github.com/ocularminds/homebound/pull/1)
 2. [Phase 2 — Decionis AgentSafe and managed Presence](https://github.com/ocularminds/homebound/pull/2)
-3. Phase 3 — Ring simulator, verified dossier archive, and end-to-end demo (this branch/PR)
+3. [Phase 3 — Ring simulator, verified dossier archive, and end-to-end demo](https://github.com/ocularminds/homebound/pull/3)
 
 ## What the demo runs
 
