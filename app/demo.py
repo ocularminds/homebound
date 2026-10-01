@@ -280,8 +280,8 @@ async def run_demo() -> int:
             settings.mcp_bearer_token,
             max_tool_calls_per_response=1,
         )
-        courier_valid_time = os.getenv("HOMEBOUND_COURIER_VALID_TIME", "14:30")
-        courier_wrong_time = os.getenv("HOMEBOUND_COURIER_WRONG_TIME", "23:30")
+        courier_valid_time = os.getenv("HOMEBOUND_COURIER_VALID_TIME", "16:00")
+        courier_wrong_time = os.getenv("HOMEBOUND_COURIER_WRONG_TIME", "18:01")
         scenarios = [
             (
                 "SCENARIO 1 — KIDS HOME ALONE",
@@ -304,7 +304,7 @@ async def run_demo() -> int:
             ),
             (
                 "SCENARIO 2 — COURIER, AUTHORIZED WINDOW",
-                "The expected high-value courier is at the side gate during the approved window.",
+                "The camera recognizes the expected high-value courier. Ask the resident whether to open the side gate; they confirm yes.",
                 "unlockDoor",
                 {
                     "target": "side_gate",
@@ -313,6 +313,8 @@ async def run_demo() -> int:
                         "actor": "delivery-agent",
                         "delivery_expected": True,
                         "courier_recognized": True,
+                        "recognition_source": "camera",
+                        "household_confirmation": True,
                         "local_time": courier_valid_time,
                     },
                     "parameters": {"unlock_duration_seconds": 30},
@@ -323,7 +325,7 @@ async def run_demo() -> int:
             ),
             (
                 "SCENARIO 3 — COURIER, WRONG TIME",
-                "The same expected courier is at the side gate outside the approved window.",
+                "The camera recognizes the same expected courier outside the approved window. Ask the resident whether to open the side gate; they confirm yes.",
                 "unlockDoor",
                 {
                     "target": "side_gate",
@@ -332,6 +334,8 @@ async def run_demo() -> int:
                         "actor": "delivery-agent",
                         "delivery_expected": True,
                         "courier_recognized": True,
+                        "recognition_source": "camera",
+                        "household_confirmation": True,
                         "local_time": courier_wrong_time,
                     },
                     "parameters": {"unlock_duration_seconds": 30},
