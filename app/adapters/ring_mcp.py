@@ -99,3 +99,20 @@ class RingMcpServer:
             """Request access to a camera stream by its exact device target."""
 
             return await self._submit("viewStream", target, purpose, parameters, context_signals)
+
+        resume = getattr(self._action_request, "resume", None)
+        if callable(resume):
+
+            @self.server.tool(title="Resume managed Decionis approval")
+            async def resumeEscalation(correlation_id: str) -> dict[str, Any]:
+                """Re-present one saved handoff; AgentSafe rechecks approval and its exact intent."""
+
+                LOGGER.info("managed escalation resume requested correlation_id=%s", correlation_id)
+                result = await resume(correlation_id)
+                LOGGER.info(
+                    "managed escalation result decision=%s execution=%s correlation_id=%s",
+                    result.decision,
+                    result.execution,
+                    result.correlation_id,
+                )
+                return result.as_dict()

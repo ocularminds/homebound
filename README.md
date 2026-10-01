@@ -1,32 +1,61 @@
 # HomeBound
 
-**Alexa can unlock your front door or disable your Ring camera—but should it?** HomeBound demonstrates a zero-trust control layer that separates an AI agent's request from the authority to execute it.
+> **Alexa can unlock your front door or disable your Ring camera—but should it?**
+> HomeBound puts a zero-trust execution boundary between AI requests and consequential home actions.
+
+An AI assistant can understand a request and choose a tool. That does not make the assistant an authority to operate a door, alarm, or camera. HomeBound sends each proposed action through Decionis Execution Authority before the local Ring simulator can execute it.
 
 ## Architecture
 
 ```text
-1. Orchestration     Amazon Bedrock Converse (Alexa+ compatible MCP contract)
-2. Interception      Python Ring MCP tools → official Decionis AgentSafe process
-3. Governance        Decionis Execution Authority → managed Decionis Presence
-4. Physical execution Ring simulator (no hardware required)
+Orchestration  Amazon Bedrock Converse (real tool-use integration; Alexa+ compatible MCP contract)
+       ↓
+Interception   Python MCP server → official Decionis AgentSafe executor
+       ↓
+Governance     Decionis Execution Authority → Decionis-managed Presence on escalation
+       ↓
+Execution      AgentSafe grant-bound dispatch → local Ring simulator
 ```
 
-Alexa+ or Bedrock determines what the user wants. AgentSafe captures the proposed execution. Decionis decides whether that exact action is authorized. Ring executes only after authorization. The orchestration layer has no Ring SDK or direct device path.
+Alexa+ / Bedrock determines what the user wants. AgentSafe captures the proposed execution. Decionis decides whether the exact action is authorized. Ring executes only after authorization. The orchestration process has no Ring SDK, simulator token, or direct device path. The MCP server is a real Streamable HTTP server; the governance executor is the official [`@decionis/agentsafe`](https://www.npmjs.com/package/@decionis/agentsafe) package.
 
-The work is split into three PRs as requested. See [the architecture and phase plan](docs/architecture.md). **Phase 2 adds the official AgentSafe executor and Decionis-managed Presence path.** Physical Ring dispatch stays disabled in this phase; an authority `ALLOW` cannot operate a device until the simulator handler is introduced in Phase 3.
+Decionis natively manages the Presence approval flow. HomeBound neither calls Presence directly nor stores a Presence API credential. For the current AgentSafe release, a trusted household approver identity is configured in the ignored executor settings; it is never accepted from an agent tool call.
 
-## Phase 1: run locally
+## Project phases
 
-Requirements: Python 3.10+, an AWS profile or IAM Identity Center session allowed to call Bedrock Runtime, and an enabled Bedrock model that supports tool use.
+Work is delivered in stacked pull requests:
+
+1. [Phase 1 — Bedrock orchestration and MCP](https://github.com/ocularminds/homebound/pull/1)
+2. [Phase 2 — Decionis AgentSafe and managed Presence](https://github.com/ocularminds/homebound/pull/2)
+3. [Phase 3 — Ring simulator, verified dossier archive, and end-to-end demo](https://github.com/ocularminds/homebound/pull/3)
+
+## What the demo runs
+
+`python -m app.demo` starts the local AgentSafe executor and dossier archiver, Ring simulator, and MCP server. It then asks the configured Bedrock model to make exactly one MCP request for each scripted scenario. The model must preserve the fixture arguments; a mismatch stops the scenario before MCP. Outcomes still come from the configured Decionis tenant and policy—HomeBound does not hard-code a decision.
+
+1. **Kids Home Alone:** at home at 15:00, a child requests `disarmSystem(home_security)`. Decionis should return `ESCALATE`. A parent approves in Decionis Presence; the demo resumes the saved AgentSafe handoff, and only a terminal authorized grant permits the simulated disarm.
+2. **Courier, authorized window:** a recognized expected courier requests `unlockDoor(side_gate)` during the configured delivery window. Decionis should return `ALLOW`; the simulator unlocks the gate.
+3. **Courier, wrong time:** the same request arrives outside that window. Decionis should return `BLOCK`; no simulator action runs and the side gate remains locked.
+
+The scenario fixture passes the listed context fields through MCP for deterministic demonstration. They are scenario signals, not independent proof of a child's or courier's identity. A deployment must bind policy inputs to authenticated household, Ring, or delivery-system sources before using such signals to authorize a real device.
+
+The simulator is not Ring hardware and does not contact Ring's API. It persists simulated device state, execution events, and replay fingerprints in a local SQLite database.
+
+## Run the live demo
+
+Requirements: Python 3.10+, Node.js 22.14+, AWS credentials permitted to call Bedrock Runtime, an enabled Converse tool-use model, a Decionis tenant/API key, and the household policy/approver configured in that tenant.
+
+Install the Python package and create the local configuration files:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[dev]'
 cp .env.example .env
+cp agentsafe/.env.example agentsafe/.env
 ```
 
-Set `AWS_REGION` and `BEDROCK_MODEL_ID` in your shell or `.env`, and configure AWS authentication through the standard AWS credential chain. The app does not store credentials. For IAM Identity Center, for example:
+Configure AWS via its normal credential chain. For an IAM Identity Center profile:
 
 ```bash
 aws configure sso
@@ -34,84 +63,48 @@ aws sso login --profile homebound
 export AWS_PROFILE=homebound
 ```
 
-Start the Streamable HTTP MCP server in one terminal:
+In `.env`, set `AWS_REGION` and `BEDROCK_MODEL_ID`. In `agentsafe/.env`, set the real `EXECUTOR_TENANT_ID`, server-side `DECIONIS_API_KEY`, trusted household `PRESENCE_APPROVER_ID`, and strong random values for `EXECUTOR_CALLER_TOKEN`, `DOWNSTREAM_CREDENTIAL`, `HOMEBOUND_DOSSIER_ARCHIVER_TOKEN`, and `HOMEBOUND_SIMULATOR_DEMO_TOKEN`. Set the matching AgentSafe and archive bearer values in the root `.env` as shown by its comments. Keep both `.env` files local; they are ignored by Git.
+
+Configure the tenant policy to return the expected decisions for the exact action and fixture context described above. The policy should require parent approval for a child disarm request, permit the expected courier inside the household's delivery window, and block that courier outside the window with a reason such as `OUTSIDE_AUTHORIZED_DELIVERY_WINDOW`. The household must also enable the corresponding Decionis-managed Presence approval. HomeBound cannot create or validate tenant policy without access to that tenant.
+
+Install the pinned official Node dependencies and run the stack:
 
 ```bash
+fnm use 22.23.2
+(cd agentsafe && npm ci)
 set -a && source .env && set +a
-python -m app.cli.mcp_server
+python -m app.demo
 ```
 
-Ask the Bedrock agent in a second terminal:
+The first scenario pauses at the terminal while the parent completes the Presence approval. Press Enter after completing the Presence flow to have AgentSafe recheck the original handoff. The demo reports the initial and final decisions, execution result, correlation ID, and dossier identifier. A missing credential, invalid dossier proof, uncertain authority result, or changed proposal fails closed.
+
+For local unit/integration coverage:
 
 ```bash
-set -a && source .env && set +a
-python -m app.cli.ask 'Alexa, disarm the Ring system'
+python -m pytest -q
+(cd agentsafe && fnm exec --using=22.23.2 npm run check)
 ```
 
-The Bedrock runtime selects from the real MCP tool schemas (`unlockDoor`, `disarmSystem`, `viewStream`). The Phase 1 interception port returns `BLOCK / NOT_PERFORMED`; the MCP server has no Ring adapter to bypass that result.
+These tests use local fixtures for external Decionis and AWS responses; they do not claim a live authority or Presence transaction. Live integration validation requires the tenant, policy, approver, AWS profile, and model access listed above.
 
-Run Phase 1 tests with:
+## Authorization and evidence
 
-```bash
-python -m pytest
-```
+- AgentSafe constructs the Execution Intent Envelope and owns exact-action binding, grant claiming, expiry, idempotency, escalation resume, and the only downstream dispatch path.
+- The simulator requires the authorization identifiers and exact action metadata bound by AgentSafe, records the grant ID and expiry, and rejects an expired grant. It refuses direct calls, missing evidence, request mutation, and idempotency-key reuse with changed content. AgentSafe owns one-time grant consumption; its grant token never leaves the trusted process.
+- Before dispatch, the executor retrieves the org-scoped [Decionis Decision Dossier](https://decionis.com/docs/decision-dossier) and calls the official [`@decionis/verify`](https://www.npmjs.com/package/@decionis/verify) implementation against Decionis' published signing keys. An absent, invalid, or untrusted proof prevents dispatch.
+- The exact returned dossier bytes and verifier result are retained under the local ignored `audit/dossiers/` directory. Python also appends action, decision, approval result, execution event, and dossier evidence to `audit/actions.jsonl`; AgentSafe keeps its own journal. These local artifacts contain sensitive household activity and are private to the developer machine.
+- `BLOCK` never calls the simulator. `ESCALATE` never calls it until Presence has completed and AgentSafe returns authorization for the same handoff. The demo uses a separate reset token only to restore the simulated baseline between scenarios.
+- No signature is synthesized in the simulator. Tests inject verifier responses only at the unit-test boundary; local live execution uses Decionis' dossier response and the official verifier.
 
-The Bedrock orchestration test uses an injected runtime response and makes no AWS request. To check the real AWS path, first verify your profile with `aws sts get-caller-identity`, then run the command above with a model ID enabled for Converse tool use.
+## Integration status and boundaries
 
-## Phase 2: connect AgentSafe, Decionis, and managed Presence
-
-The trusted execution authority runs separately from Python. Use Node.js 22.14 or newer. The pinned `@decionis/agentsafe` 0.2.5 runtime captures the MCP proposal, asks Decionis for an exact-action verdict, owns grant consumption, and uses Decionis-managed Presence for escalations. HomeBound never calls Presence directly.
-
-1. Copy `agentsafe/.env.example` to `agentsafe/.env` and set the real Decionis tenant UUID, server-side API key, household parent approver identity, and a strong executor caller token. The token must match `HOMEBOUND_AGENTSAFE_BEARER_TOKEN` in the root `.env`.
-2. Install and start the executor:
-
-   ```bash
-   fnm use 22.23.2
-   cd agentsafe
-   npm ci
-   ./run-local.sh
-   ```
-
-3. In the root `.env`, uncomment `HOMEBOUND_AGENTSAFE_URL` and `HOMEBOUND_AGENTSAFE_BEARER_TOKEN`, then start the Python MCP server from the repository root as above.
-4. After Decionis Presence approval, resume the saved handoff once using the correlation ID returned by the MCP action:
-
-   ```bash
-   python -m app.cli.resume_escalation CORRELATION_ID
-   ```
-
-The resume command presents AgentSafe's saved managed escalation handoff unchanged. AgentSafe checks expiry and intent binding, asks Decionis to resolve the Presence result, and executes only after Decionis returns an authorized grant. In this PR, the registered handler intentionally fails before AgentSafe's dispatch boundary because the Ring simulator arrives in Phase 3. An `ALLOW` therefore means policy authorization only; it does not claim a device action occurred.
-
-AgentSafe also requires a downstream URL and credential setting for its executor configuration. Phase 2 points those settings at the reserved `.invalid` domain and labels the local credential as unused. Its handlers do not request a downstream credential or call that URL. Do not replace these settings with Ring credentials until the simulator adapter lands in Phase 3.
-
-AgentSafe's own journal records the decision, intent, and dossier identifiers before any future dispatch. Fetching the full Decionis dossier and verifying its signature through Decionis' published verification mechanism are explicit Phase 3 deliverables; this phase does not describe a dossier ID as the signed artifact.
-
-## Three target scenarios
-
-The complete demo is planned for Phase 3 and will run against a configured Decionis tenant and the Ring simulator:
-
-1. **Kids Home Alone:** child asks to disarm the system → `ESCALATE` → parent completes Decionis Presence approval → exact action may proceed.
-2. **High-Value Courier, authorized window:** expected courier requests the side gate during the allowed window → `ALLOW` → simulator unlocks the gate.
-3. **High-Value Courier, wrong time:** same courier outside the delivery window → `BLOCK` → simulator remains locked.
-
-Identity and intent alone do not establish authority. The third scenario tests that distinction.
-
-## Integration status
-
-- **MCP:** real Python SDK server over Streamable HTTP.
-- **Agent orchestration:** real Bedrock Converse tool-use path; live AWS calls need the user's AWS profile and model access.
-- **AgentSafe:** the official Decionis Node.js executor is a separate process; Python uses its authenticated HTTP API. In this phase, all ALLOW results stop before physical dispatch.
-- **Decionis and Presence:** managed escalation is configured through AgentSafe; Decionis runs Presence and issues a grant after approval. HomeBound has no Presence credential or direct Presence client. Live decisions need a real tenant key, tenant UUID, policy, and household approver identity.
-- **Ring:** Phase 3 will use an explicitly labelled simulator. No physical Ring hardware or API integration is claimed.
-- **Alexa+:** the MCP contract is suitable for connection after account onboarding. Amazon's public Alexa+ add-on material currently describes a selected-partner program, so this repository does not claim an active Alexa+ account integration.
+- **MCP:** real Python SDK Streamable HTTP server, declarative `unlockDoor`, `disarmSystem`, and `viewStream` tools, plus a governed escalation-resume tool.
+- **Orchestration:** real Amazon Bedrock Converse tool-use integration. Alexa+ itself is not activated in this repo; connecting it requires Amazon's Alexa+ add-on partner onboarding. No Alexa+ production integration is claimed.
+- **AgentSafe / Decionis / Presence:** official AgentSafe executor, Decionis authority, and native Decionis-managed Presence path. No direct Presence API integration or credential exists in HomeBound.
+- **Ring:** local simulator only. No physical Ring SDK, account, device, camera stream, or door is contacted.
+- **Household signals:** demo context is a deterministic fixture. Production use needs authenticated signals and a tenant policy that accounts for signal provenance.
+- **External validation:** no live AWS or Decionis request was made from this development shell because credentials and tenant identity are not configured here. See [FL-001](friction-log/FL-001-aws-credentials.md) and [FL-008](friction-log/FL-008-decionis-credentials-not-configured.md).
 
 ## Friction Log Summary
 
-- The current shell has no active AWS credentials, so the Bedrock call cannot yet be live-verified here. See [FL-001](friction-log/FL-001-aws-credentials.md).
-- No Decionis tenant key, tenant UUID, or parent approver identity is configured in this shell, so live authority decisions and Presence approval have not been claimed. See [FL-008](friction-log/FL-008-decionis-credentials-not-configured.md).
-- Alexa+ add-on onboarding is partner-gated. Bedrock is the active orchestration path while access is pending. See [FL-002](friction-log/FL-002-alexa-plus-partner-onboarding.md).
-- The official AgentSafe executor runs as a Node.js process. The project will integrate that boundary from Python over HTTP instead of recreating it. See [FL-003](friction-log/FL-003-agentsafe-runtime-language.md).
-- AgentSafe's managed-mode configuration requires a trusted approver identity, while Commerce supports role-only escalation. HomeBound keeps the identity in ignored executor configuration, not in an agent proposal. See [FL-007](friction-log/FL-007-managed-approver-configuration.md).
-- Python dependencies required an approved network-enabled install, and the shell has multiple Python interpreters. Phase 1 was verified in the repository's `.venv`; see [FL-004](friction-log/FL-004-package-network-restricted.md) and [FL-005](friction-log/FL-005-mixed-python-runners.md).
-- The sandbox blocked the initial loopback HTTP smoke test; it passed through the approved local-network verification path. See [FL-006](friction-log/FL-006-loopback-smoke-test.md).
-
-Every implementation obstacle and workaround is recorded under [`friction-log/`](friction-log/).
+Implementation issues and workarounds are tracked in [`friction-log/`](friction-log/). In addition to the missing local AWS/Decionis credentials (FL-001, FL-008), the official AgentSafe managed-mode configuration currently requires a trusted approver identity even though the Commerce adapter can request role-only routing (FL-007). The Decionis verifier URL format also needed normalization to its signed proof-bundle endpoint (FL-010), and AgentSafe's lookup URL disallows query parameters, so archive/reconciliation share a method-routed local endpoint (FL-009). Alexa+ remains partner-onboarded rather than enabled by this repo (FL-002). No workaround substitutes mock authority decisions or cryptographic signatures for live Decionis results.

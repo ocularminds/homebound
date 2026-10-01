@@ -25,11 +25,13 @@ function managedEnvironment() {
     PRESENCE_APPROVER_ROLE: "APPROVER",
     PRESENCE_VERIFICATION_LEVEL: "HIGH_CONFIDENCE",
     PRESENCE_VERIFICATION_METHODS: "WEBAUTHN,ACTIVE_LIVENESS",
-    DOWNSTREAM_URL: "https://ring-adapter.disabled.invalid/actions",
+    DECIONIS_ALLOW_INSECURE_LOOPBACK: "true",
+    DOWNSTREAM_URL: "http://127.0.0.1:8200/actions",
+    DOWNSTREAM_LOOKUP_URL: "http://127.0.0.1:8200/evidence/{idempotency_key}",
     DOWNSTREAM_SYSTEM: "ring-simulator",
     DOWNSTREAM_OPERATION: "governed-action",
     DOWNSTREAM_ENVIRONMENT: "local",
-    DOWNSTREAM_CREDENTIAL_HEADER: "x-homebound-disabled",
+    DOWNSTREAM_CREDENTIAL_HEADER: "x-homebound-simulator-token",
     DOWNSTREAM_CREDENTIAL: "unit-test-value-not-a-provider-credential",
     DOWNSTREAM_TIMEOUT_MS: "1000",
   };
@@ -53,4 +55,17 @@ test("AgentSafe refuses managed mode without its required trusted approver ident
     () => ExecutorConfigLoader.load(environment),
     /CONFIG_INVALID: PRESENCE_APPROVER_ID/,
   );
+});
+
+test("loopback egress admits only configured actions and simulator evidence routes", async () => {
+  const { EgressPolicy } = await import("@decionis/agentsafe");
+  const config = ExecutorConfigLoader.load(managedEnvironment());
+  const policy = EgressPolicy.fromConfig(config, () => "");
+
+  assert.equal(policy.check(new URL("http://127.0.0.1:8200/actions")).allowed, true);
+  assert.equal(
+    policy.check(new URL("http://127.0.0.1:8200/evidence/dd_123?kind=archive")).allowed,
+    true,
+  );
+  assert.equal(policy.check(new URL("http://127.0.0.1:8200/admin")).allowed, false);
 });

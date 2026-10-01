@@ -45,7 +45,9 @@ Bedrock does not receive Ring credentials, policy rules, or a device SDK. A mode
 - MCP uses the [official Python SDK](https://github.com/modelcontextprotocol/python-sdk)'s Streamable HTTP transport.
 - Bedrock uses the AWS SDK for Python (`boto3`) and the [Converse](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html) tool-use contract.
 - The official Decionis [AgentSafe runtime](https://www.npmjs.com/package/@decionis/agentsafe) is distributed for Node.js. HomeBound will keep it as an isolated process instead of reimplementing its execution authority in Python.
-- Decionis managed Presence is the human approval path. Following Commerce, HomeBound asks Decionis to manage Presence and resumes the exact AgentSafe handoff; HomeBound does not call Presence directly. The official AgentSafe executor requires a household approver identity in trusted managed-mode configuration; this identity never comes from the agent proposal.
-- Ring hardware is not required. Physical execution will use a clearly labelled Python simulator adapter.
+- Decionis natively manages Presence as part of its authority flow. Following Commerce, HomeBound asks Decionis to manage Presence and resumes the exact AgentSafe handoff; HomeBound does not call Presence directly. The current official AgentSafe executor requires a household approver identity in trusted managed-mode configuration; this identity never comes from the agent proposal.
+- Ring hardware is not required. Physical execution uses a clearly labelled Python simulator adapter.
+
+The courier and child context in the demo is a deterministic fixture delivered through MCP. A production household must authenticate context signals at their source and configure tenant policy to account for their provenance; an agent-provided claim is not independent identity proof.
 
 The reviewed [Alexa+ add-on documentation](https://developer.amazon.com/docs/alexaplus/add-ons/home.html) describes a selected-partner access program. A live Alexa+ claim requires onboarding through Amazon; the Bedrock route is the active orchestration integration in this prototype.

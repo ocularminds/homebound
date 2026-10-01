@@ -102,3 +102,105 @@ async def test_bedrock_calls_mcp_and_returns_final_natural_language() -> None:
     assert runtime.requests[0]["toolConfig"]["tools"][0]["toolSpec"]["name"] == "unlockDoor"
     assert runtime.requests[1]["messages"][-1]["content"][0]["toolResult"]["toolUseId"] == "tool-1"
     assert runtime.requests[1]["messages"][-1]["content"][0]["toolResult"]["content"][0]["json"]["execution"] == "NOT_PERFORMED"
+
+
+@pytest.mark.asyncio
+async def test_demo_trace_captures_result_and_enforces_per_request_tool_limit() -> None:
+    runtime = FakeRuntime(
+        [
+            {
+                "stopReason": "tool_use",
+                "output": {
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "toolUse": {
+                                    "toolUseId": "tool-1",
+                                    "name": "unlockDoor",
+                                    "input": {"target": "side_gate"},
+                                }
+                            },
+                            {
+                                "toolUse": {
+                                    "toolUseId": "tool-2",
+                                    "name": "disarmSystem",
+                                    "input": {"target": "home_security"},
+                                }
+                            },
+                        ],
+                    }
+                },
+            },
+            {
+                "stopReason": "end_turn",
+                "output": {
+                    "message": {"role": "assistant", "content": [{"text": "Done."}]}
+                },
+            },
+        ]
+    )
+    client = FakeMcpClient()
+    base = FakeBedrockOrchestrator(runtime, client)
+    base._max_tool_calls_per_response = 1
+    trace: list[dict[str, Any]] = []
+
+    answer = await base.respond("run one action", trace=trace)
+
+    assert answer == "Done."
+    assert [name for name, _ in client.calls] == ["unlockDoor"]
+    assert trace[0]["invoked"] is True
+    assert trace[0]["result"]["decision"] == "BLOCK"
+    assert trace[1]["invoked"] is False
+    assert trace[1]["reason"] == "TOOL_CALL_LIMIT_REACHED"
+
+
+@pytest.mark.asyncio
+async def test_demo_fixture_mismatch_is_rejected_before_mcp_invocation() -> None:
+    runtime = FakeRuntime(
+        [
+            {
+                "stopReason": "tool_use",
+                "output": {
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "toolUse": {
+                                    "toolUseId": "tool-1",
+                                    "name": "unlockDoor",
+                                    "input": {"target": "front_door"},
+                                }
+                            }
+                        ],
+                    }
+                },
+            },
+            {
+                "stopReason": "end_turn",
+                "output": {
+                    "message": {"role": "assistant", "content": [{"text": "Stopped."}]}
+                },
+            },
+        ]
+    )
+    client = FakeMcpClient()
+    base = FakeBedrockOrchestrator(runtime, client)
+    trace: list[dict[str, Any]] = []
+
+    answer = await base.respond(
+        "run an exact scenario",
+        trace=trace,
+        tool_call_validator=lambda name, args: name == "unlockDoor" and args == {"target": "side_gate"},
+    )
+
+    assert answer == "Stopped."
+    assert client.calls == []
+    assert trace == [
+        {
+            "name": "unlockDoor",
+            "arguments": {"target": "front_door"},
+            "invoked": False,
+            "reason": "SCENARIO_INPUT_MISMATCH",
+        }
+    ]
