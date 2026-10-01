@@ -17,6 +17,9 @@ class Settings:
     mcp_allowed_hosts: tuple[str, ...]
     mcp_allowed_origins: tuple[str, ...]
     homebound_environment: str
+    agentsafe_endpoint: str | None = None
+    agentsafe_bearer_token: str | None = None
+    audit_directory: str = "audit"
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -45,4 +48,7 @@ class Settings:
             mcp_allowed_hosts=allowed_hosts,
             mcp_allowed_origins=allowed_origins,
             homebound_environment=os.getenv("HOMEBOUND_ENV", "development").lower(),
+            agentsafe_endpoint=os.getenv("HOMEBOUND_AGENTSAFE_URL") or None,
+            agentsafe_bearer_token=os.getenv("HOMEBOUND_AGENTSAFE_BEARER_TOKEN") or None,
+            audit_directory=os.getenv("HOMEBOUND_AUDIT_DIRECTORY", "audit"),
         )

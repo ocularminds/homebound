@@ -30,3 +30,8 @@ def test_non_loopback_mcp_requires_bearer_token() -> None:
 def test_production_mcp_requires_bearer_token() -> None:
     with pytest.raises(ValueError, match="required in production"):
         create_asgi_app(settings(homebound_environment="production"))
+
+
+def test_agentsafe_endpoint_and_token_must_be_configured_together() -> None:
+    with pytest.raises(ValueError, match="must be set together"):
+        create_asgi_app(settings(agentsafe_endpoint="http://127.0.0.1:8100"))
