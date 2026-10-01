@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Any, AsyncIterator, Callable, Protocol
 
@@ -23,6 +24,79 @@ class McpConnection(Protocol):
     async def list_tools(self) -> Any: ...
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> CallToolResult: ...
+
+
+def _is_open_object(schema: dict[str, Any]) -> bool:
+    """Whether a property is an open-ended JSON object not expressible to Nova."""
+
+    if schema.get("type") == "object" and schema.get("additionalProperties") is True:
+        return True
+    alternatives = schema.get("anyOf")
+    return isinstance(alternatives, list) and any(
+        isinstance(option, dict)
+        and option.get("type") == "object"
+        and option.get("additionalProperties") is True
+        for option in alternatives
+    )
+
+
+def _nova_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Convert MCP JSON Schema to the restricted schema accepted by Nova tools."""
+
+    properties = schema.get("properties")
+    if schema.get("type") != "object" or not isinstance(properties, dict):
+        raise ValueError("MCP tool schema must be a JSON object")
+
+    normalized: dict[str, Any] = {"type": "object", "properties": {}}
+    for name, property_schema in properties.items():
+        if not isinstance(property_schema, dict):
+            raise ValueError(f"MCP tool property {name} has an invalid schema")
+        if _is_open_object(property_schema):
+            description = (
+                "Context claims encoded as a JSON object in a JSON string. "
+                "These signals are context, not independent proof of identity."
+                if name == "context_signals"
+                else "Action parameters encoded as a JSON object in a JSON string."
+            )
+            normalized["properties"][name] = {"type": "string", "description": description}
+            continue
+        property_type = property_schema.get("type")
+        if property_type not in {"string", "integer", "number", "boolean"}:
+            raise ValueError(f"MCP tool property {name} uses an unsupported Nova schema")
+        property_spec: dict[str, Any] = {"type": property_type}
+        description = property_schema.get("description")
+        if isinstance(description, str):
+            property_spec["description"] = description
+        normalized["properties"][name] = property_spec
+
+    required = schema.get("required", [])
+    if required:
+        normalized["required"] = required
+    return normalized
+
+
+def _decode_nova_arguments(schema: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Restore JSON-string object fields to the MCP server's declared dict inputs."""
+
+    properties = schema.get("properties", {})
+    required = set(schema.get("required", []))
+    decoded = dict(arguments)
+    for name, property_schema in properties.items():
+        if not isinstance(property_schema, dict) or not _is_open_object(property_schema):
+            continue
+        value = decoded.get(name)
+        if value is None and name not in required:
+            decoded.pop(name, None)
+            continue
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError as error:
+                raise ValueError(f"MCP tool property {name} is not valid JSON") from error
+        if not isinstance(value, dict):
+            raise ValueError(f"MCP tool property {name} must decode to a JSON object")
+        decoded[name] = value
+    return decoded
 
 
 class BedrockOrchestrator:
@@ -55,13 +129,19 @@ class BedrockOrchestrator:
 
         async with self._connect_mcp() as client:
             tool_defs = await client.list_tools()
+            tool_schemas = {tool.name: tool.input_schema for tool in tool_defs.tools}
+            uses_nova = "amazon.nova-" in self._model_id.lower()
             tool_config = {
                 "tools": [
                     {
                         "toolSpec": {
                             "name": tool.name,
                             "description": tool.description or tool.name,
-                            "inputSchema": {"json": tool.input_schema},
+                            "inputSchema": {
+                                "json": _nova_schema(tool.input_schema)
+                                if uses_nova
+                                else tool.input_schema
+                            },
                         }
                     }
                     for tool in tool_defs.tools
@@ -105,6 +185,35 @@ class BedrockOrchestrator:
                         )
                         continue
                     arguments = use.get("input", {})
+                    if uses_nova:
+                        try:
+                            arguments = _decode_nova_arguments(
+                                tool_schemas[use["name"]], arguments
+                            )
+                        except (KeyError, TypeError, ValueError):
+                            if trace is not None:
+                                trace.append(
+                                    {
+                                        "name": use["name"],
+                                        "arguments": arguments,
+                                        "invoked": False,
+                                        "reason": "INVALID_TOOL_ARGUMENTS",
+                                    }
+                                )
+                            tool_results.append(
+                                {
+                                    "toolResult": {
+                                        "toolUseId": use["toolUseId"],
+                                        "status": "error",
+                                        "content": [
+                                            {
+                                                "text": "Structured tool context must be valid JSON objects."
+                                            }
+                                        ],
+                                    }
+                                }
+                            )
+                            continue
                     if tool_call_validator is not None and not tool_call_validator(
                         use["name"], arguments
                     ):
@@ -167,7 +276,7 @@ class BedrockOrchestrator:
             ],
             messages=messages,
             toolConfig=tool_config,
-            inferenceConfig={"maxTokens": 500, "temperature": 0.2},
+            inferenceConfig={"maxTokens": 500, "temperature": 0.0},
         )
 
     @asynccontextmanager

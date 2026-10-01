@@ -27,6 +27,7 @@ Bedrock is the live orchestration integration in the prototype. Alexa+ MCP add-o
 1. **Orchestration and MCP contract** — Python package, Streamable HTTP MCP endpoint, Bedrock Converse tool-use loop, schemas, and fail-closed tool responses. No device can execute in this phase.
 2. **AgentSafe and Decionis authority** — connect Python MCP tools to the official `@decionis/agentsafe` executor; configure real Decionis credentials, exact action bindings, managed Presence escalation, grant consumption, and durable escalation resume state. Physical dispatch remains disabled until Phase 3.
 3. **Ring simulator and complete scenarios** — wire the authorized executor to a stateful Ring simulator; configure the household policy; run the three prescribed scenarios; retrieve the exact signed Decision Dossier from Decionis and verify it with the official verifier; add binding, replay, expiry, and audit integration coverage and final demo documentation.
+4. **Runtime and Bedrock compatibility** — preserve Python 3.10 support, declare direct MCP/credential-provider dependencies, adapt Nova's restricted tool schema without changing the MCP contract, restore the audit package to version control, and make local AWS profile setup reproducible.
 
 Each phase is delivered as its own pull request. Later PRs stack on the previous phase until merged.
 

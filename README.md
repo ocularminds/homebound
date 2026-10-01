@@ -28,6 +28,7 @@ Work is delivered in stacked pull requests:
 1. [Phase 1 — Bedrock orchestration and MCP](https://github.com/ocularminds/homebound/pull/1)
 2. [Phase 2 — Decionis AgentSafe and managed Presence](https://github.com/ocularminds/homebound/pull/2)
 3. [Phase 3 — Ring simulator, verified dossier archive, and end-to-end demo](https://github.com/ocularminds/homebound/pull/3)
+4. [Phase 4 — Runtime hardening and Bedrock model compatibility](https://github.com/ocularminds/homebound/pull/4)
 
 ## What the demo runs
 
@@ -43,7 +44,7 @@ The simulator is not Ring hardware and does not contact Ring's API. It persists 
 
 ## Run the live demo
 
-Requirements: Python 3.10+, Node.js 22.14+, AWS credentials permitted to call Bedrock Runtime, an enabled Converse tool-use model, a Decionis tenant/API key, and the household policy/approver configured in that tenant.
+Requirements: Python 3.10+, Node.js 22.14+, AWS credentials permitted to call Bedrock Runtime, an enabled Converse tool-use model, a Decionis tenant/API key, and the household policy/approver configured in that tenant. The Python dependencies include `botocore[crt]` so boto3 can use AWS CLI `aws login` profiles.
 
 Install the Python package and create the local configuration files:
 
@@ -51,19 +52,18 @@ Install the Python package and create the local configuration files:
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[dev]'
-cp .env.example .env
-cp agentsafe/.env.example agentsafe/.env
+[ -f .env ] || cp .env.example .env
+[ -f agentsafe/.env ] || cp agentsafe/.env.example agentsafe/.env
 ```
 
-Configure AWS via its normal credential chain. For an IAM Identity Center profile:
+The checked-in example selects the `Decionis` AWS CLI profile and Amazon Nova Lite inference profile for `us-east-1`. Nova Lite supports Converse tool use; model requests use normal on-demand AWS billing. Replace these values if using a different profile or enabled model.
 
 ```bash
-aws configure sso
-aws sso login --profile homebound
-export AWS_PROFILE=homebound
+aws login --region us-east-1 --profile Decionis
+export AWS_PROFILE=Decionis
 ```
 
-In `.env`, set `AWS_REGION` and `BEDROCK_MODEL_ID`. In `agentsafe/.env`, set the real `EXECUTOR_TENANT_ID`, server-side `DECIONIS_API_KEY`, trusted household `PRESENCE_APPROVER_ID`, and strong random values for `EXECUTOR_CALLER_TOKEN`, `DOWNSTREAM_CREDENTIAL`, `HOMEBOUND_DOSSIER_ARCHIVER_TOKEN`, and `HOMEBOUND_SIMULATOR_DEMO_TOKEN`. Set the matching AgentSafe and archive bearer values in the root `.env` as shown by its comments. Keep both `.env` files local; they are ignored by Git.
+In `agentsafe/.env`, set the real `EXECUTOR_TENANT_ID`, server-side `DECIONIS_API_KEY`, trusted household `PRESENCE_APPROVER_ID`, and strong random values for `EXECUTOR_CALLER_TOKEN`, `DOWNSTREAM_CREDENTIAL`, `HOMEBOUND_DOSSIER_ARCHIVER_TOKEN`, and `HOMEBOUND_SIMULATOR_DEMO_TOKEN`. Set the matching AgentSafe and archive bearer values in the root `.env` as shown by its comments. Keep both `.env` files local; they are ignored by Git.
 
 Configure the tenant policy to return the expected decisions for the exact action and fixture context described above. The policy should require parent approval for a child disarm request, permit the expected courier inside the household's delivery window, and block that courier outside the window with a reason such as `OUTSIDE_AUTHORIZED_DELIVERY_WINDOW`. The household must also enable the corresponding Decionis-managed Presence approval. HomeBound cannot create or validate tenant policy without access to that tenant.
 
@@ -103,8 +103,8 @@ These tests use local fixtures for external Decionis and AWS responses; they do 
 - **AgentSafe / Decionis / Presence:** official AgentSafe executor, Decionis authority, and native Decionis-managed Presence path. No direct Presence API integration or credential exists in HomeBound.
 - **Ring:** local simulator only. No physical Ring SDK, account, device, camera stream, or door is contacted.
 - **Household signals:** demo context is a deterministic fixture. Production use needs authenticated signals and a tenant policy that accounts for signal provenance.
-- **External validation:** no live AWS or Decionis request was made from this development shell because credentials and tenant identity are not configured here. See [FL-001](friction-log/FL-001-aws-credentials.md) and [FL-008](friction-log/FL-008-decionis-credentials-not-configured.md).
+- **External validation:** the AWS `Decionis` profile and Nova Lite model availability have been verified with read-only AWS calls. A first boto3 smoke request stopped before Bedrock because the login-profile CRT dependency was missing; it is now installed, but that live request has not been rerun. No Decionis tenant/API credentials are configured in `agentsafe/.env`, so live policy, dossier, and Presence outcomes remain unverified. See [FL-001](friction-log/FL-001-aws-credentials.md), [FL-008](friction-log/FL-008-decionis-credentials-not-configured.md), and [FL-014](friction-log/FL-014-boto3-login-credential-provider-crt.md).
 
 ## Friction Log Summary
 
-Implementation issues and workarounds are tracked in [`friction-log/`](friction-log/). In addition to the missing local AWS/Decionis credentials (FL-001, FL-008), the official AgentSafe managed-mode configuration currently requires a trusted approver identity even though the Commerce adapter can request role-only routing (FL-007). The Decionis verifier URL format also needed normalization to its signed proof-bundle endpoint (FL-010), and AgentSafe's lookup URL disallows query parameters, so archive/reconciliation share a method-routed local endpoint (FL-009). Alexa+ remains partner-onboarded rather than enabled by this repo (FL-002). No workaround substitutes mock authority decisions or cryptographic signatures for live Decionis results.
+Implementation issues and workarounds are tracked in [`friction-log/`](friction-log/). In addition to the missing local Decionis tenant credentials (FL-008), the official AgentSafe managed-mode configuration currently requires a trusted approver identity even though the Commerce adapter can request role-only routing (FL-007). The Decionis verifier URL format needed normalization to its signed proof-bundle endpoint (FL-010), AgentSafe's lookup URL disallows query parameters so archive/reconciliation share a method-routed local endpoint (FL-009), the original runtime relied on MCP's transitive `httpx2` dependency and used a Python 3.11-only UTC constant despite claiming Python 3.10 support (FL-011), Amazon Nova restricts tool JSON Schema fields so the Bedrock adapter translates dynamic JSON objects at its boundary (FL-012), an unanchored `audit/` ignore rule hid the Python audit package from Git (FL-013), and Python boto3 needs its CRT extra to consume AWS CLI `aws login` profiles (FL-014). Alexa+ remains partner-onboarded rather than enabled by this repo (FL-002). No workaround substitutes mock authority decisions or cryptographic signatures for live Decionis results.

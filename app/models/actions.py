@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -21,7 +21,7 @@ class ActionProposal:
     context_signals: dict[str, Any] = field(default_factory=dict)
     correlation_id: str = field(default_factory=lambda: str(uuid4()))
     idempotency_key: str = field(default_factory=lambda: str(uuid4()))
-    captured_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    captured_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def as_dict(self) -> dict[str, Any]:
         """Return the local proposal record without claiming it is a Decionis EIE."""

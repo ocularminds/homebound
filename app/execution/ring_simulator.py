@@ -9,7 +9,7 @@ import sqlite3
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from collections.abc import Iterator
 from typing import Any, Literal, Protocol
@@ -52,7 +52,7 @@ class RingSimulatorAdapter:
     ) -> None:
         self._database = Path(database)
         self._database.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self._now = now or (lambda: datetime.now(UTC))
+        self._now = now or (lambda: datetime.now(timezone.utc))
         self._initialize()
 
     def execute(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -98,7 +98,7 @@ class RingSimulatorAdapter:
                 "action": action,
                 "target": target,
                 "result": "executed",
-                "timestamp": self._now().astimezone(UTC).isoformat(),
+                "timestamp": self._now().astimezone(timezone.utc).isoformat(),
                 "decision_id": request["decision_id"],
                 "dossier_id": request["dossier_id"],
                 "grant_id": request["grant_id"],
@@ -150,7 +150,7 @@ class RingSimulatorAdapter:
             )
             connection.execute(
                 "INSERT INTO simulator_demo_resets(reset_at, state_json) VALUES (?, ?)",
-                (self._now().astimezone(UTC).isoformat(), baseline),
+                (self._now().astimezone(timezone.utc).isoformat(), baseline),
             )
         return json.loads(baseline)
 
@@ -175,7 +175,7 @@ class RingSimulatorAdapter:
             raise SimulatorRefusal("AUTHORIZATION_EXPIRY_INVALID") from None
         if expires_at.tzinfo is None:
             raise SimulatorRefusal("AUTHORIZATION_EXPIRY_INVALID")
-        if expires_at.astimezone(UTC) <= self._now().astimezone(UTC):
+        if expires_at.astimezone(timezone.utc) <= self._now().astimezone(timezone.utc):
             raise SimulatorRefusal("AUTHORIZATION_EXPIRED")
         evidence = request.get("dossier_evidence")
         if (

@@ -50,6 +50,41 @@ class FakeMcpClient:
         )
 
 
+class NovaFakeMcpClient(FakeMcpClient):
+    async def list_tools(self) -> Any:
+        return SimpleNamespace(
+            tools=[
+                SimpleNamespace(
+                    name="unlockDoor",
+                    description="Request an exact door unlock",
+                    input_schema={
+                        "type": "object",
+                        "title": "unlockDoorArguments",
+                        "properties": {
+                            "target": {"type": "string", "title": "Target"},
+                            "purpose": {"type": "string", "title": "Purpose"},
+                            "context_signals": {
+                                "type": "object",
+                                "title": "Context Signals",
+                                "additionalProperties": True,
+                            },
+                            "parameters": {
+                                "type": "object",
+                                "title": "Parameters",
+                                "additionalProperties": True,
+                                "anyOf": [
+                                    {"type": "object", "additionalProperties": True},
+                                    {"type": "null"},
+                                ],
+                            },
+                        },
+                        "required": ["target", "purpose", "context_signals"],
+                    },
+                )
+            ]
+        )
+
+
 class FakeBedrockOrchestrator(BedrockOrchestrator):
     def __init__(self, runtime: FakeRuntime, client: FakeMcpClient) -> None:
         super().__init__(runtime, "test-model", "http://unused/mcp")
@@ -58,6 +93,14 @@ class FakeBedrockOrchestrator(BedrockOrchestrator):
     @asynccontextmanager
     async def _connect_mcp(self) -> Any:
         yield self._fake_client
+
+
+class FakeNovaOrchestrator(FakeBedrockOrchestrator):
+    def __init__(self, runtime: FakeRuntime, client: NovaFakeMcpClient) -> None:
+        BedrockOrchestrator.__init__(
+            self, runtime, "us.amazon.nova-lite-v1:0", "http://unused/mcp"
+        )
+        self._fake_client = client
 
 
 @pytest.mark.asyncio
@@ -202,5 +245,118 @@ async def test_demo_fixture_mismatch_is_rejected_before_mcp_invocation() -> None
             "arguments": {"target": "front_door"},
             "invoked": False,
             "reason": "SCENARIO_INPUT_MISMATCH",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_nova_schema_and_json_string_fields_map_back_to_structured_mcp_inputs() -> None:
+    runtime = FakeRuntime(
+        [
+            {
+                "stopReason": "tool_use",
+                "output": {
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "toolUse": {
+                                    "toolUseId": "nova-tool-1",
+                                    "name": "unlockDoor",
+                                    "input": {
+                                        "target": "side_gate",
+                                        "purpose": "expected courier",
+                                        "context_signals": '{"delivery_expected":true,"local_time":"14:30"}',
+                                        "parameters": '{"unlock_duration_seconds":30}',
+                                    },
+                                }
+                            }
+                        ],
+                    }
+                },
+            },
+            {
+                "stopReason": "end_turn",
+                "output": {
+                    "message": {"role": "assistant", "content": [{"text": "Blocked safely."}]}
+                },
+            },
+        ]
+    )
+    client = NovaFakeMcpClient()
+    agent = FakeNovaOrchestrator(runtime, client)
+
+    answer = await agent.respond("Request the courier gate action.")
+
+    assert answer == "Blocked safely."
+    assert client.calls == [
+        (
+            "unlockDoor",
+            {
+                "target": "side_gate",
+                "purpose": "expected courier",
+                "context_signals": {"delivery_expected": True, "local_time": "14:30"},
+                "parameters": {"unlock_duration_seconds": 30},
+            },
+        )
+    ]
+    schema = runtime.requests[0]["toolConfig"]["tools"][0]["toolSpec"]["inputSchema"]["json"]
+    assert set(schema) == {"type", "properties", "required"}
+    assert schema["properties"]["context_signals"]["type"] == "string"
+    assert schema["properties"]["parameters"]["type"] == "string"
+    assert runtime.requests[0]["inferenceConfig"]["temperature"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_nova_rejects_malformed_json_objects_before_mcp() -> None:
+    runtime = FakeRuntime(
+        [
+            {
+                "stopReason": "tool_use",
+                "output": {
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "toolUse": {
+                                    "toolUseId": "nova-tool-2",
+                                    "name": "unlockDoor",
+                                    "input": {
+                                        "target": "side_gate",
+                                        "purpose": "delivery",
+                                        "context_signals": "{not-json}",
+                                    },
+                                }
+                            }
+                        ],
+                    }
+                },
+            },
+            {
+                "stopReason": "end_turn",
+                "output": {
+                    "message": {"role": "assistant", "content": [{"text": "Not sent."}]}
+                },
+            },
+        ]
+    )
+    client = NovaFakeMcpClient()
+    agent = FakeNovaOrchestrator(runtime, client)
+    trace: list[dict[str, Any]] = []
+
+    answer = await agent.respond("Request a door action.", trace=trace)
+
+    assert answer == "Not sent."
+    assert client.calls == []
+    assert trace == [
+        {
+            "name": "unlockDoor",
+            "arguments": {
+                "target": "side_gate",
+                "purpose": "delivery",
+                "context_signals": "{not-json}",
+            },
+            "invoked": False,
+            "reason": "INVALID_TOOL_ARGUMENTS",
         }
     ]
