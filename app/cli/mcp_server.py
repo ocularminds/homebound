@@ -15,6 +15,7 @@ from starlette.routing import Route
 
 from app.adapters.ring_mcp import RingMcpServer
 from app.config.settings import Settings
+from app.interception.factory import action_request_port
 
 LOGGER = logging.getLogger("homebound.mcp")
 
@@ -69,7 +70,7 @@ def create_asgi_app(settings: Settings | None = None) -> Any:
     if settings.homebound_environment == "production" and not settings.mcp_bearer_token:
         raise ValueError("HOMEBOUND_MCP_BEARER_TOKEN is required in production")
 
-    mcp = RingMcpServer().server
+    mcp = RingMcpServer(action_request_port(settings)).server
     transport_security = TransportSecuritySettings(
         allowed_hosts=list(settings.mcp_allowed_hosts),
         allowed_origins=list(settings.mcp_allowed_origins),

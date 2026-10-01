@@ -7,6 +7,7 @@ import asyncio
 import logging
 
 import boto3
+from botocore.config import Config
 
 from app.config.settings import Settings
 from app.orchestration.bedrock import BedrockOrchestrator
@@ -20,7 +21,11 @@ def main() -> None:
     settings = Settings.from_environment()
     if not settings.bedrock_model_id:
         raise SystemExit("Set BEDROCK_MODEL_ID to an enabled model ID or inference profile.")
-    runtime = boto3.client("bedrock-runtime", region_name=settings.aws_region)
+    runtime = boto3.client(
+        "bedrock-runtime",
+        region_name=settings.aws_region,
+        config=Config(retries={"max_attempts": 5, "mode": "adaptive"}),
+    )
     agent = BedrockOrchestrator(
         runtime=runtime,
         model_id=settings.bedrock_model_id,

@@ -9,6 +9,8 @@ description = "A zero-trust execution boundary for AI-powered homes"
 requires-python = ">=3.10"
 dependencies = [
   "boto3>=1.35,<2",
+  "botocore[crt]>=1.35,<2",
+  "httpx2>=2.5,<3",
   "mcp==2.2.0",
   "uvicorn>=0.30,<1",
 ]
@@ -19,6 +21,8 @@ dev = ["pytest>=8,<10", "pytest-asyncio>=0.23,<2"]
 [project.scripts]
 homebound-mcp = "app.cli.mcp_server:main"
 homebound-ask = "app.cli.ask:main"
+homebound-resume-escalation = "app.cli.resume_escalation:main"
+homebound-ring-simulator = "app.cli.ring_simulator:main"
 
 [tool.setuptools.packages.find]
 include = ["app*"]
