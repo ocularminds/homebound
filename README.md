@@ -32,7 +32,7 @@ Work is delivered in stacked pull requests:
 5. [Phase 5 — Live service validation](https://github.com/ocularminds/homebound/pull/6)
 6. [Phase 6 — Policy source boundary](https://github.com/ocularminds/homebound/pull/7)
 7. [Phase 7 — Production policy publication and home binding](https://github.com/ocularminds/homebound/pull/8)
-8. Phase 8 — Owner policy version synchronization (current branch)
+8. [Phase 8 — Owner policy version synchronization](https://github.com/ocularminds/homebound/pull/9)
 
 ## What the demo runs
 
