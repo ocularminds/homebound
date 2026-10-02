@@ -15,6 +15,12 @@ const parametersSchema = z.strictObject({
   homebound_purpose: z.string().trim().min(1).max(240),
   context_signals: z.record(z.string(), z.unknown()),
   device_parameters: z.record(z.string(), z.unknown()),
+  homebound_policy_binding: z.strictObject({
+    home_id: z.string().trim().min(1).max(120),
+    org_id: z.string().uuid(),
+    bundle_id: z.string().uuid(),
+    policy_version: z.string().trim().min(1).max(100),
+  }).optional(),
 });
 
 /** Register simulator actions behind AgentSafe's grant claim and dispatch boundary. */
@@ -22,8 +28,15 @@ export function ringHandlers({ registry, downstream, credential, fetch }) {
   for (const { authorityAction, deviceAction } of homeActionBindings) {
     registry.register(authorityAction, {
       parametersSchema,
-      execute: async ({ intent: captured, authorization, dispatch }) => {
+      execute: async ({ intent: captured, parameters, authorization, dispatch }) => {
         const intent = captured.intent;
+        const binding = parameters.homebound_policy_binding;
+        if (process.env.NODE_ENV === "production" && !binding) {
+          throw new Error("HOME_POLICY_BINDING_MISSING");
+        }
+        if (binding && binding.org_id !== intent.tenantId) {
+          throw new Error("HOME_POLICY_BINDING_ORG_MISMATCH");
+        }
         if (!downstream.lookupUrl?.includes("{idempotency_key}")) {
           throw new Error("RING_SIMULATOR_LOOKUP_URL_NOT_CONFIGURED");
         }

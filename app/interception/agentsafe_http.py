@@ -17,6 +17,7 @@ from app.audit.dossier_archive import DossierArchiveClient
 from app.audit.pending_escalations import PendingEscalationStore
 from app.interception.ports import ActionRequestPort
 from app.models.actions import ActionProposal, ActionResult
+from app.models.policy import HomePolicyBinding
 
 LOGGER = logging.getLogger(__name__)
 JsonSender = Callable[[str, dict[str, Any]], Awaitable[tuple[int, dict[str, Any]]]]
@@ -76,6 +77,11 @@ class AgentSafeActionPort(ActionRequestPort):
                     "homebound_purpose": proposal.purpose,
                     "context_signals": proposal.context_signals,
                     "device_parameters": proposal.parameters,
+                    **(
+                        {"homebound_policy_binding": proposal.home_policy_binding.as_dict()}
+                        if proposal.home_policy_binding is not None
+                        else {}
+                    ),
                 },
             },
             "idempotency_key": proposal.idempotency_key,
@@ -364,6 +370,11 @@ def _proposal_from_dict(value: dict[str, Any]) -> ActionProposal:
         purpose=value["purpose"],
         parameters=value.get("parameters", {}),
         context_signals=value.get("context_signals", {}),
+        home_policy_binding=(
+            HomePolicyBinding(**value["home_policy_binding"])
+            if isinstance(value.get("home_policy_binding"), dict)
+            else None
+        ),
         correlation_id=value["correlation_id"],
         idempotency_key=value["idempotency_key"],
         captured_at=value["captured_at"],

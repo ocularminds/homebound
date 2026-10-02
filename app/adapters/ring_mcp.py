@@ -10,6 +10,7 @@ from mcp.server import MCPServer
 from app.interception.ports import ActionRequestPort
 from app.interception.unavailable import GovernanceUnavailable
 from app.models.actions import ActionProposal, RingAction
+from app.models.policy import HomePolicyBinding
 
 LOGGER = logging.getLogger(__name__)
 
@@ -17,8 +18,14 @@ LOGGER = logging.getLogger(__name__)
 class RingMcpServer:
     """Expose Ring actions over MCP without holding a Ring SDK or device port."""
 
-    def __init__(self, action_request: ActionRequestPort | None = None) -> None:
+    def __init__(
+        self,
+        action_request: ActionRequestPort | None = None,
+        *,
+        home_policy_binding: HomePolicyBinding | None = None,
+    ) -> None:
         self._action_request = action_request or GovernanceUnavailable()
+        self._home_policy_binding = home_policy_binding
         self.server = MCPServer(
             "HomeBound Ring Actions",
             instructions=(
@@ -42,6 +49,7 @@ class RingMcpServer:
             purpose=purpose,
             parameters=parameters or {},
             context_signals=context_signals or {},
+            home_policy_binding=self._home_policy_binding,
         )
         LOGGER.info(
             "intent captured action=%s target=%s correlation_id=%s",

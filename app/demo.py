@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 from contextlib import AsyncExitStack
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -111,6 +112,18 @@ def _read_config(path: Path) -> dict[str, str]:
         key, value = stripped.split("=", 1)
         values[key.strip()] = value.strip().strip("'\"")
     return values
+
+
+def _local_time_minutes(value: str) -> int:
+    """Convert a fixture's HH:MM value to Decionis' numeric comparison form."""
+
+    try:
+        parsed = datetime.strptime(value, "%H:%M")
+    except ValueError as error:
+        raise ValueError("Courier fixture times must use 24-hour HH:MM format.") from error
+    if parsed.strftime("%H:%M") != value:
+        raise ValueError("Courier fixture times must use zero-padded 24-hour HH:MM format.")
+    return parsed.hour * 60 + parsed.minute
 
 
 def _json_request(url: str, *, token_header: str, token: str) -> dict[str, Any]:
@@ -316,6 +329,7 @@ async def run_demo() -> int:
                         "recognition_source": "camera",
                         "household_confirmation": True,
                         "local_time": courier_valid_time,
+                        "local_time_minutes": _local_time_minutes(courier_valid_time),
                     },
                     "parameters": {"unlock_duration_seconds": 30},
                 },
@@ -337,6 +351,7 @@ async def run_demo() -> int:
                         "recognition_source": "camera",
                         "household_confirmation": True,
                         "local_time": courier_wrong_time,
+                        "local_time_minutes": _local_time_minutes(courier_wrong_time),
                     },
                     "parameters": {"unlock_duration_seconds": 30},
                 },

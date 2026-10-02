@@ -222,3 +222,4 @@ __marimo__/
 !.env.example
 node_modules/
 /audit/
+/.homebound/

@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
+from app.models.policy import HomePolicyBinding
+
 RingAction = Literal["unlockDoor", "disarmSystem", "viewStream"]
 
 
@@ -19,6 +21,7 @@ class ActionProposal:
     purpose: str
     parameters: dict[str, Any] = field(default_factory=dict)
     context_signals: dict[str, Any] = field(default_factory=dict)
+    home_policy_binding: HomePolicyBinding | None = None
     correlation_id: str = field(default_factory=lambda: str(uuid4()))
     idempotency_key: str = field(default_factory=lambda: str(uuid4()))
     captured_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())

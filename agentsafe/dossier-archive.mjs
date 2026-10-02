@@ -5,15 +5,26 @@ import path from "node:path";
 import {
   assessDossierIssuer,
   assessDossierReproducibility,
+  assessJwksTrustAnchor,
   extractDossierPayload,
-  verifyDossierFromUrls,
+  fetchVerificationJson,
+  stableJsonStringify,
+  verifyDossierProofBundle,
 } from "@decionis/verify";
 
 const MAX_DOSSIER_BYTES = 2 * 1024 * 1024;
 const OFFICIAL_JWKS = "https://api.decionis.com/v1/.well-known/decision-dossier-jwks.json";
 
 export class DossierArchive {
-  constructor({ apiBase, apiKey, tenantId, directory, fetchImpl = fetch, verifier = verifyDossierFromUrls }) {
+  constructor({
+    apiBase,
+    apiKey,
+    tenantId,
+    directory,
+    fetchImpl = fetch,
+    verifier = verifyDossierProofBundle,
+    jwksFetcher = fetchVerificationJson,
+  }) {
     const base = new URL(apiBase);
     if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash) {
       throw new Error("DECIONIS_API_URL must be an absolute HTTPS base URL");
@@ -22,12 +33,12 @@ export class DossierArchive {
       throw new Error("DECIONIS_API_KEY and EXECUTOR_TENANT_ID are required for dossier archiving");
     }
     this.apiBase = base.toString().replace(/\/$/, "");
-    this.apiOrigin = base.origin;
     this.apiKey = apiKey;
     this.tenantId = tenantId;
     this.directory = path.resolve(directory);
     this.fetch = fetchImpl;
     this.verifier = verifier;
+    this.jwksFetcher = jwksFetcher;
   }
 
   async archive(dossierId, correlationId = "") {
@@ -49,54 +60,65 @@ export class DossierArchive {
 
     const rawDossier = JSON.parse(dossierBytes.toString("utf8"));
     const payload = extractDossierPayload(rawDossier);
-    if (payload.dossier_id !== dossierId) throw new Error("DOSSIER_ID_MISMATCH");
-    const verification = record(payload.verification);
-    const verificationUrl = verification.verification_url;
-    if (typeof verificationUrl !== "string") throw new Error("DOSSIER_VERIFICATION_URL_MISSING");
-    const verificationLink = new URL(verificationUrl);
-    const dossierRoute = `/v1/public/decision-dossiers/${encodeURIComponent(dossierId)}`;
-    const expectedProofPath = `${dossierRoute}/proof-bundle`;
-    if (
-      verificationLink.protocol !== "https:" ||
-      verificationLink.origin !== this.apiOrigin ||
-      ![`${dossierRoute}/verify`, expectedProofPath].includes(verificationLink.pathname) ||
-      !verificationLink.searchParams.has("sig")
-    ) {
-      throw new Error("DOSSIER_VERIFICATION_URL_REFUSED");
+    const dossierRecord = record(rawDossier.dossier);
+    if (payload.dossier_id !== dossierId || dossierRecord.org_id !== this.tenantId) {
+      throw new Error("DOSSIER_ID_OR_TENANT_MISMATCH");
     }
-    // The verifier package consumes Decionis' signed proof-bundle route. The
-    // documented public `/verify` link carries the same signed `sig` value.
-    const proofUrl = new URL(expectedProofPath, this.apiOrigin);
-    verificationLink.searchParams.forEach((value, name) => proofUrl.searchParams.set(name, value));
-
-    const checked = await this.verifier({
-      dossierUrl: proofUrl.toString(),
-      jwksUrl: OFFICIAL_JWKS,
+    const proofPacketUrl = new URL(
+      `${this.apiBase}/v1/protocol/dossiers/${encodeURIComponent(dossierId)}/proof-packet`,
+    );
+    proofPacketUrl.searchParams.set("org_id", this.tenantId);
+    const proofPacketResponse = await this.fetch(proofPacketUrl, {
+      method: "GET",
+      headers: { accept: "application/json", authorization: `Bearer ${this.apiKey}` },
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000),
+    });
+    const proofPacketBytes = await boundedBody(proofPacketResponse);
+    if (!proofPacketResponse.ok) throw new Error(`DOSSIER_PROOF_PACKET_HTTP_${proofPacketResponse.status}`);
+    const proofPacket = JSON.parse(proofPacketBytes.toString("utf8"));
+    const subject = record(proofPacket.subject);
+    const checkedPayload = extractDossierPayload(proofPacket);
+    if (
+      proofPacket.packet_type !== "decionis.decision_dossier.proof_packet" ||
+      subject.dossier_id !== dossierId ||
+      subject.org_id !== this.tenantId ||
+      checkedPayload.dossier_id !== dossierId ||
+      stableJsonStringify(checkedPayload) !== stableJsonStringify(payload)
+    ) {
+      throw new Error("DOSSIER_PROOF_PACKET_SUBJECT_MISMATCH");
+    }
+    const publicJwks = await this.jwksFetcher(OFFICIAL_JWKS, {
+      fetch: this.fetch,
       timeoutMs: 15_000,
     });
-    const checkedPayload = extractDossierPayload(checked.payload);
-    if (checkedPayload.dossier_id !== dossierId) throw new Error("VERIFIED_DOSSIER_ID_MISMATCH");
-    const issuer = assessDossierIssuer(checkedPayload, new Set(checked.result.verified_artifact_paths ?? []));
+    const checked = await this.verifier({ dossier_payload: checkedPayload, public_jwks: publicJwks });
+    const trustAnchor = assessJwksTrustAnchor(OFFICIAL_JWKS);
+    const verifiedPaths = new Set(checked.verified_artifact_paths ?? []);
+    const issuer = assessDossierIssuer(checkedPayload, verifiedPaths);
     const reproducibility = assessDossierReproducibility(
       checkedPayload,
-      new Set(checked.result.verified_artifact_paths ?? []),
+      verifiedPaths,
     );
-    const trusted = checked.trust_anchor?.trusted === true;
-    const verified = checked.result?.verified === true && trusted;
+    const signatureVerified = checked.verified === true;
+    const requiredCoverageVerified = checked.required_artifact_coverage_verified === true;
+    const verified = signatureVerified && requiredCoverageVerified && trustAnchor.trusted;
     const reference = `dossier-${safeId(dossierId)}`;
 
-    await this.persist(reference, dossierBytes, {
+    await this.persist(reference, dossierBytes, proofPacketBytes, {
       dossier_id: dossierId,
       correlation_id: correlationId,
       archived_at: new Date().toISOString(),
       source: "GET /v1/protocol/dossiers/:dossierId?org_id=...",
+      proof_packet_source: "GET /v1/protocol/dossiers/:dossierId/proof-packet?org_id=...",
       verifier: "@decionis/verify",
-      proof_bundle: checkedPayload,
-      verification: checked.result,
-      trust_anchor: checked.trust_anchor,
+      proof_bundle: record(record(checkedPayload.integrity).proof_bundle),
+      verification: checked,
+      trust_anchor: trustAnchor,
       issuer,
       reproducibility,
       raw_dossier_sha256: `sha256:${createHash("sha256").update(dossierBytes).digest("hex")}`,
+      raw_proof_packet_sha256: `sha256:${createHash("sha256").update(proofPacketBytes).digest("hex")}`,
     });
 
     return {
@@ -104,34 +126,39 @@ export class DossierArchive {
       correlation_id: correlationId,
       reference,
       verified,
-      signature_verified: checked.result?.verified === true,
-      required_artifact_coverage_verified:
-        checked.result?.required_artifact_coverage_verified === true,
-      trust_anchor: checked.trust_anchor?.status ?? "UNAVAILABLE",
+      signature_verified: signatureVerified,
+      required_artifact_coverage_verified: requiredCoverageVerified,
+      trust_anchor: trustAnchor.status,
       issuer: issuer.label,
       reproducibility: reproducibility.posture,
       verifier: "@decionis/verify",
     };
   }
 
-  async persist(reference, dossierBytes, verificationRecord) {
+  async persist(reference, dossierBytes, proofPacketBytes, verificationRecord) {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     const base = path.join(this.directory, reference);
     const dossierPath = `${base}.json`;
+    const proofPacketPath = `${base}.proof-packet.json`;
     const metadataPath = `${base}.verification.json`;
-    try {
-      const previous = await readFile(dossierPath);
-      if (!previous.equals(dossierBytes)) throw new Error("DOSSIER_ARCHIVE_IMMUTABLE_CONFLICT");
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-      const temporary = `${dossierPath}.${process.pid}.tmp`;
-      await writeFile(temporary, dossierBytes, { mode: 0o600, flag: "wx" });
-      await rename(temporary, dossierPath);
-    }
+    await persistImmutable(dossierPath, dossierBytes, "DOSSIER_ARCHIVE_IMMUTABLE_CONFLICT");
+    await persistImmutable(proofPacketPath, proofPacketBytes, "DOSSIER_PROOF_PACKET_IMMUTABLE_CONFLICT");
     const metadata = `${JSON.stringify(verificationRecord, null, 2)}\n`;
     const tempMetadata = `${metadataPath}.${process.pid}.tmp`;
     await writeFile(tempMetadata, metadata, { mode: 0o600 });
     await rename(tempMetadata, metadataPath);
+  }
+}
+
+async function persistImmutable(filePath, bytes, conflictCode) {
+  try {
+    const previous = await readFile(filePath);
+    if (!previous.equals(bytes)) throw new Error(conflictCode);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    const temporary = `${filePath}.${process.pid}.tmp`;
+    await writeFile(temporary, bytes, { mode: 0o600, flag: "wx" });
+    await rename(temporary, filePath);
   }
 }
 

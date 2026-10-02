@@ -1,10 +1,28 @@
 {
-  "status": "DRAFT_NOT_SUBMITTED",
-  "purpose": "Review-only mapping of the household policy guide to vendor-neutral home capabilities and Decionis policy shape.",
-  "protocol_version": "1.0.0",
-  "bundle_id": "<assign-a-tenant-scoped-id-after-review>",
-  "org_id": "<EXECUTOR_TENANT_ID-from-local-configuration>",
-  "version": "homebound-household-policy-v1-draft",
+  "status": "VERSIONED_PROTOCOL_RULES_TEMPLATE",
+  "version": "homebound-household-v1",
+  "metadata": {
+    "author": "HomeBound",
+    "source": "HomeBound household policy",
+    "home_context_contract": {
+      "parent_roster_source": "Owner-managed parent email and role in HomeBound or Decionis workspace",
+      "presence_role": "APPROVER",
+      "identity_binding": "Decionis Accounts member identity mapped to Presence APPROVER; no email claim from the agent",
+      "courier_recognition_source": "camera",
+      "voice_confirmation": "household_confirmation",
+      "timezone_source": "home configuration",
+      "default_delivery_window_local": {
+        "start": "14:00",
+        "end": "18:00"
+      },
+      "owner_override": "publish a new org-scoped Decionis Protocol policy version"
+    },
+    "operational_notes": [
+      "Courier time conditions use integer local_time_minutes because Decionis GT/GTE/LT/LTE comparisons are numeric.",
+      "The deployment publisher merges these rules into the existing tenant bundle to preserve unrelated rules.",
+      "MCP context fields are exact-bound proposal claims, not proof of camera, identity, delivery, or household-clock provenance."
+    ]
+  },
   "rules": [
     {
       "rule_id": "homebound.authenticated-parent-disarm-allow",
@@ -13,17 +31,17 @@
       "when": {
         "all": [
           {
-            "field": "action",
+            "field": "context.agent_safe.action.type",
             "operator": "EQ",
             "value": "home.security.disarm"
           },
           {
-            "field": "target",
+            "field": "context.agent_safe.action.resource",
             "operator": "EQ",
             "value": "home_security"
           },
           {
-            "field": "parameters.context_signals.authenticated_user_role",
+            "field": "context.agent_safe.action.parameters.context_signals.authenticated_user_role",
             "operator": "EQ",
             "value": "parent"
           }
@@ -31,7 +49,7 @@
       },
       "then": {
         "action": "AUTO_APPROVE",
-        "severity": "normal"
+        "severity": "routine"
       },
       "priority": 450,
       "enabled": false,
@@ -44,27 +62,27 @@
       "when": {
         "all": [
           {
-            "field": "action",
+            "field": "context.agent_safe.action.type",
             "operator": "EQ",
             "value": "home.security.disarm"
           },
           {
-            "field": "target",
+            "field": "context.agent_safe.action.resource",
             "operator": "EQ",
             "value": "home_security"
           },
           {
-            "field": "parameters.context_signals.user",
+            "field": "context.agent_safe.action.parameters.context_signals.user",
             "operator": "EQ",
             "value": "child"
           },
           {
-            "field": "parameters.context_signals.location",
+            "field": "context.agent_safe.action.parameters.context_signals.location",
             "operator": "EQ",
             "value": "home"
           },
           {
-            "field": "parameters.context_signals.device_group",
+            "field": "context.agent_safe.action.parameters.context_signals.device_group",
             "operator": "EQ",
             "value": "security_infrastructure"
           }
@@ -109,52 +127,52 @@
       "when": {
         "all": [
           {
-            "field": "action",
+            "field": "context.agent_safe.action.type",
             "operator": "EQ",
             "value": "home.entry.unlock"
           },
           {
-            "field": "target",
+            "field": "context.agent_safe.action.resource",
             "operator": "EQ",
             "value": "side_gate"
           },
           {
-            "field": "parameters.context_signals.actor",
+            "field": "context.agent_safe.action.parameters.context_signals.actor",
             "operator": "EQ",
             "value": "delivery-agent"
           },
           {
-            "field": "parameters.context_signals.delivery_expected",
+            "field": "context.agent_safe.action.parameters.context_signals.delivery_expected",
             "operator": "EQ",
             "value": true
           },
           {
-            "field": "parameters.context_signals.courier_recognized",
+            "field": "context.agent_safe.action.parameters.context_signals.courier_recognized",
             "operator": "EQ",
             "value": true
           },
           {
-            "field": "parameters.context_signals.local_time",
+            "field": "context.agent_safe.action.parameters.context_signals.local_time_minutes",
             "operator": "GTE",
-            "value": "14:00"
+            "value": 840
           },
           {
-            "field": "parameters.context_signals.local_time",
+            "field": "context.agent_safe.action.parameters.context_signals.local_time_minutes",
             "operator": "LTE",
-            "value": "18:00"
+            "value": 1080
           },
           {
-            "field": "parameters.device_parameters.unlock_duration_seconds",
+            "field": "context.agent_safe.action.parameters.device_parameters.unlock_duration_seconds",
             "operator": "EQ",
             "value": 30
           },
           {
-            "field": "parameters.context_signals.recognition_source",
+            "field": "context.agent_safe.action.parameters.context_signals.recognition_source",
             "operator": "EQ",
             "value": "camera"
           },
           {
-            "field": "parameters.context_signals.household_confirmation",
+            "field": "context.agent_safe.action.parameters.context_signals.household_confirmation",
             "operator": "EQ",
             "value": true
           }
@@ -162,7 +180,7 @@
       },
       "then": {
         "action": "AUTO_APPROVE",
-        "severity": "normal"
+        "severity": "routine"
       },
       "priority": 300,
       "enabled": true,
@@ -175,42 +193,42 @@
       "when": {
         "all": [
           {
-            "field": "action",
+            "field": "context.agent_safe.action.type",
             "operator": "EQ",
             "value": "home.entry.unlock"
           },
           {
-            "field": "target",
+            "field": "context.agent_safe.action.resource",
             "operator": "EQ",
             "value": "side_gate"
           },
           {
-            "field": "parameters.context_signals.actor",
+            "field": "context.agent_safe.action.parameters.context_signals.actor",
             "operator": "EQ",
             "value": "delivery-agent"
           },
           {
-            "field": "parameters.context_signals.delivery_expected",
+            "field": "context.agent_safe.action.parameters.context_signals.delivery_expected",
             "operator": "EQ",
             "value": true
           },
           {
-            "field": "parameters.context_signals.courier_recognized",
+            "field": "context.agent_safe.action.parameters.context_signals.courier_recognized",
             "operator": "EQ",
             "value": true
           },
           {
-            "field": "parameters.context_signals.local_time",
+            "field": "context.agent_safe.action.parameters.context_signals.local_time_minutes",
             "operator": "GT",
-            "value": "18:00"
+            "value": 1080
           },
           {
-            "field": "parameters.context_signals.recognition_source",
+            "field": "context.agent_safe.action.parameters.context_signals.recognition_source",
             "operator": "EQ",
             "value": "camera"
           },
           {
-            "field": "parameters.context_signals.household_confirmation",
+            "field": "context.agent_safe.action.parameters.context_signals.household_confirmation",
             "operator": "EQ",
             "value": true
           }
@@ -231,42 +249,42 @@
       "when": {
         "all": [
           {
-            "field": "action",
+            "field": "context.agent_safe.action.type",
             "operator": "EQ",
             "value": "home.entry.unlock"
           },
           {
-            "field": "target",
+            "field": "context.agent_safe.action.resource",
             "operator": "EQ",
             "value": "side_gate"
           },
           {
-            "field": "parameters.context_signals.actor",
+            "field": "context.agent_safe.action.parameters.context_signals.actor",
             "operator": "EQ",
             "value": "delivery-agent"
           },
           {
-            "field": "parameters.context_signals.delivery_expected",
+            "field": "context.agent_safe.action.parameters.context_signals.delivery_expected",
             "operator": "EQ",
             "value": true
           },
           {
-            "field": "parameters.context_signals.courier_recognized",
+            "field": "context.agent_safe.action.parameters.context_signals.courier_recognized",
             "operator": "EQ",
             "value": true
           },
           {
-            "field": "parameters.context_signals.local_time",
+            "field": "context.agent_safe.action.parameters.context_signals.local_time_minutes",
             "operator": "LT",
-            "value": "14:00"
+            "value": 840
           },
           {
-            "field": "parameters.context_signals.recognition_source",
+            "field": "context.agent_safe.action.parameters.context_signals.recognition_source",
             "operator": "EQ",
             "value": "camera"
           },
           {
-            "field": "parameters.context_signals.household_confirmation",
+            "field": "context.agent_safe.action.parameters.context_signals.household_confirmation",
             "operator": "EQ",
             "value": true
           }
@@ -280,33 +298,5 @@
       "enabled": true,
       "rationale": "Block the side-gate unlock before 14:00 local household time, even when the courier is expected and recognized."
     }
-  ],
-  "metadata": {
-    "author": "HomeBound",
-    "review_status": "PENDING_REVIEW",
-    "local_draft_only": true,
-    "source_policy_guide": "Child requests to disable security require parental Presence sign-off; parent approval is role-bound; courier access is limited by target, exact action, context, and time.",
-    "unresolved_before_submission": [
-      "Confirm Decionis field-path resolution and GTE/LTE handling for AgentSafe action parameters against a dry-run in this tenant.",
-      "Bind the home's timezone and local clock to an authenticated home configuration; the 14:00\u201318:00 default is owner-overridable in Decionis Protocol.",
-      "Bind local_time to home configuration, courier recognition to a camera event, and expected-delivery status to a trusted delivery source; demo fixtures are not proof.",
-      "Confirm the intended parent accounts are enrolled in the Decionis workspace and hold Presence APPROVER assignments; HomeBound may add its own enrollment UI in a later phase.",
-      "Confirm that the Decionis policy editor accepts the HIGH_CONFIDENCE and ACTIVE_LIVENESS verification requirements.",
-      "Confirm a stable Decionis denial reason code for OUTSIDE_AUTHORIZED_DELIVERY_WINDOW.",
-      "The direct parent-role override is present but disabled until HomeBound receives an authenticated parent identity claim; the Presence-approved resume is the current parent path."
-    ],
-    "home_context_contract": {
-      "parent_roster_source": "Owner-managed parent email and role in HomeBound or Decionis workspace",
-      "presence_role": "APPROVER",
-      "identity_binding": "Decionis Accounts member identity mapped to Presence APPROVER; no email claim from the agent",
-      "courier_recognition_source": "camera",
-      "voice_confirmation": "household_confirmation",
-      "timezone_source": "home configuration",
-      "default_delivery_window_local": {
-        "start": "14:00",
-        "end": "18:00"
-      },
-      "owner_override": "publish a new org-scoped Decionis Protocol policy version"
-    }
-  }
+  ]
 }
