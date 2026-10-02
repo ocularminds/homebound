@@ -60,6 +60,7 @@ function fixture(verified = true) {
 const executionContext = () => ({
   intent: {
     intent: {
+      tenantId: "123e4567-e89b-12d3-a456-426614174000",
       action: "home.entry.unlock",
       target: "side_gate",
       parameters: {
@@ -130,6 +131,44 @@ test("an absent or invalid signed dossier prevents physical dispatch", async () 
   assert.equal(calls.some((call) => call.kind === "action"), false);
 });
 
+test("a home policy binding is carried in the exact signed action parameters", async () => {
+  const { registered, calls } = fixture(true);
+  const context = executionContext();
+  const binding = {
+    home_id: "homebound-demo-home",
+    org_id: context.intent.intent.tenantId,
+    bundle_id: "123e4567-e89b-12d3-a456-426614174001",
+    policy_version: "homebound-household-v1",
+  };
+  context.intent.intent.parameters.homebound_policy_binding = binding;
+  const result = await registered.get("home.entry.unlock").execute({
+    ...context,
+    parameters: { homebound_policy_binding: binding },
+  });
+
+  assert.equal(result.result, "executed");
+  assert.deepEqual(JSON.parse(calls[3].init.body).parameters.homebound_policy_binding, binding);
+});
+
+test("a policy binding for another Decionis org is refused before any downstream call", async () => {
+  const { registered, calls } = fixture(true);
+  await assert.rejects(
+    registered.get("home.entry.unlock").execute({
+      ...executionContext(),
+      parameters: {
+        homebound_policy_binding: {
+          home_id: "homebound-demo-home",
+          org_id: "123e4567-e89b-12d3-a456-426614174099",
+          bundle_id: "123e4567-e89b-12d3-a456-426614174001",
+          policy_version: "homebound-household-v1",
+        },
+      },
+    }),
+    /HOME_POLICY_BINDING_ORG_MISMATCH/,
+  );
+  assert.deepEqual(calls, []);
+});
+
 test("action schemas reject missing or additional envelope fields", () => {
   const registered = new Map();
   ringHandlers({ registry: { register: (name, handler) => registered.set(name, handler) } });
@@ -151,5 +190,19 @@ test("action schemas reject missing or additional envelope fields", () => {
       tenant_id: "agent-supplied-tenant",
     }).success,
     false,
+  );
+  assert.equal(
+    schema.safeParse({
+      homebound_purpose: "delivery",
+      context_signals: {},
+      device_parameters: {},
+      homebound_policy_binding: {
+        home_id: "homebound-demo-home",
+        org_id: "123e4567-e89b-12d3-a456-426614174000",
+        bundle_id: "123e4567-e89b-12d3-a456-426614174001",
+        policy_version: "homebound-household-v1",
+      },
+    }).success,
+    true,
   );
 });

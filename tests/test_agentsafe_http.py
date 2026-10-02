@@ -14,6 +14,7 @@ from app.audit.action_log import ActionAuditLog
 from app.audit.pending_escalations import PendingEscalationStore
 from app.interception.agentsafe_http import AgentSafeActionPort
 from app.models.actions import ActionProposal
+from app.models.policy import HomePolicyBinding
 
 
 def response(
@@ -112,6 +113,39 @@ async def test_posts_exact_proposal_to_agentsafe_and_never_adds_trusted_fields(
     ]
     assert "tenant_id" not in calls[0][1]["proposal"]
     assert "actor" not in calls[0][1]["proposal"]
+
+
+@pytest.mark.asyncio
+async def test_configured_home_binding_is_included_in_the_exact_agentsafe_parameters(
+    tmp_path: Path,
+) -> None:
+    calls: list[dict[str, Any]] = []
+
+    async def sender(_path: str, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        calls.append(payload)
+        return 200, response("BLOCK", outcome="BLOCKED", executed=False)
+
+    binding = HomePolicyBinding(
+        home_id="homebound-demo-home",
+        org_id="123e4567-e89b-12d3-a456-426614174000",
+        bundle_id="123e4567-e89b-12d3-a456-426614174001",
+        policy_version="homebound-household-v1",
+    )
+    result = await port(tmp_path, sender).request(
+        ActionProposal(
+            action="unlockDoor",
+            target="side_gate",
+            purpose="expected delivery",
+            context_signals={"local_time_minutes": 960},
+            home_policy_binding=binding,
+        )
+    )
+
+    assert result.decision == "BLOCK"
+    assert calls[0]["proposal"]["parameters"]["homebound_policy_binding"] == binding.as_dict()
+    assert calls[0]["proposal"]["parameters"]["context_signals"] == {
+        "local_time_minutes": 960
+    }
 
 
 @pytest.mark.asyncio

@@ -8,7 +8,7 @@
 - **Error:** Decionis did not return the managed escalation object needed for a native Presence handoff. AgentSafe returned `AUTHORITY_UNAVAILABLE`; no Presence request or Ring execution occurred.
 - **Impact:** Credentials are present, but they do not substitute for a tenant policy rule with a Decionis authority block. The live Presence approval path remains unverified.
 - **Investigation:** The active policy is commerce-only. The AgentSafe managed mode and HomeBound resume path are configured; the current policy does not route this Ring action to the enrolled approver.
-- **Workaround:** Keep the executor fail-closed. Prepare the review-only HomeBound draft in `policies/homebound-household-policy.draft.json`; do not infer a Presence principal ID from an email address.
+- **Workaround:** At the time, kept the executor fail-closed and prepared the review-only draft (superseded by `policies/homebound-household-policy.rules.json`). Do not infer a Presence principal ID from an email address.
 - **Resolution:** Credentials configured. Tenant policy and live Presence handoff remain outstanding; details are tracked in FL-017.
 - **Upstream/documentation gap:** The UI draft-generation service fell back to heuristics, so it did not produce an enforceable household policy. See FL-018.
 - **Status:** Partially resolved; waiting for policy review and tenant validation.
