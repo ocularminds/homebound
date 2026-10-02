@@ -33,6 +33,7 @@ Work is delivered in stacked pull requests:
 6. [Phase 6 — Policy source boundary](https://github.com/ocularminds/homebound/pull/7)
 7. [Phase 7 — Production policy publication and home binding](https://github.com/ocularminds/homebound/pull/8)
 8. [Phase 8 — Owner policy version synchronization](https://github.com/ocularminds/homebound/pull/9)
+9. [Phase 9 — Live Bedrock, Alexa+, and Presence validation](https://github.com/ocularminds/homebound/pull/11)
 
 ## What the demo runs
 
