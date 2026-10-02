@@ -15,6 +15,8 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from uuid import UUID, uuid4, uuid5
 
+from scripts.home_policy_binding import record_policy_version, write_private_json
+
 ROOT = Path(__file__).resolve().parents[1]
 ENV_PATH = ROOT / "agentsafe" / ".env"
 RULES_PATH = ROOT / "policies" / "homebound-household-policy.rules.json"
@@ -128,16 +130,29 @@ def _record_home_binding(org_id: str, bundle_id: str) -> None:
         loaded = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(loaded, dict):
             existing = loaded
+    if existing and existing.get("org_id") != org_id:
+        raise RuntimeError("The existing HomeBound home is bound to another Decionis organization.")
+    if existing and existing.get("policy_version") != POLICY_VERSION:
+        # The policy seed is immutable. An owner may already have published a
+        # newer workspace version; keep that binding for the sync command.
+        return
+    if existing and existing.get("bundle_id") not in {None, bundle_id}:
+        raise RuntimeError("The existing HomeBound policy version is bound to another bundle.")
     home_id = os.environ.get("HOMEBOUND_HOME_ID") or existing.get("home_id") or str(uuid4())
-    binding = {
-        "home_id": home_id,
-        "org_id": org_id,
-        "bundle_id": bundle_id,
-        "policy_version": POLICY_VERSION,
-    }
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    path.write_text(json.dumps(binding, indent=2) + "\n", encoding="utf-8")
-    path.chmod(0o600)
+    binding = record_policy_version(
+        {
+            **existing,
+            "home_id": home_id,
+            "org_id": org_id,
+            "bundle_id": existing.get("bundle_id", bundle_id),
+            "policy_version": existing.get("policy_version", POLICY_VERSION),
+        },
+        bundle_id=bundle_id,
+        policy_version=POLICY_VERSION,
+        recorded_at=datetime.now(timezone.utc).isoformat(),
+        source="decionis_protocol_publisher",
+    )
+    write_private_json(path, binding)
 
 
 def publish(*, publish_now: bool) -> int:
