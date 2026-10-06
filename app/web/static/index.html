@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#06162a">
+  <meta name="description" content="A conversational Alexa-style screen for your simulated HomeBound home.">
+  <title>HomeBound · Alexa+ simulator</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/voice-activity.js" defer></script>
+  <script src="/static/voice-listener.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body data-state="connecting">
+  <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></symbol>
+    <symbol id="i-muted" viewBox="0 0 24 24"><path d="m3 3 18 18M9 9v3a3 3 0 0 0 5 2m1-5V5a3 3 0 0 0-6 0M5 10v2a7 7 0 0 0 11 6m3-6v-2M12 19v3m-4 0h8"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></symbol>
+    <symbol id="i-sound" viewBox="0 0 24 24"><path d="m11 4-6 5H2v6h3l6 5Zm4 4a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 15h10"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 11a9 9 0 0 1-9 9H4l-3 2 2-6a9 9 0 1 1 18-5Z"/><path d="M7 9h9M7 13h6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+  </svg>
+
+  <div class="ambient" aria-hidden="true"><div class="aurora aurora-one"></div><div class="aurora aurora-two"></div><div class="horizon"></div></div>
+  <main class="alexa-screen" id="assistant">
+    <header class="screen-header">
+      <div class="identity"><span class="wordmark">alexa<span class="wordmark-smile" aria-hidden="true"></span></span><span class="simulation-label">HomeBound simulation</span></div>
+      <div class="header-right"><div class="clock"><time id="home-time">--:--</time><span id="home-date"></span></div><button id="open-home" class="icon-button" type="button" aria-label="Home details" title="Home details"><svg><use href="#i-home"/></svg></button></div>
+    </header>
+
+    <section class="voice-stage" aria-label="Alexa conversation">
+      <div class="alexa-orb" aria-hidden="true"><div class="orb-aura"></div><div class="orb-ring"></div><div class="orb-center"></div></div>
+      <div class="status-line"><span class="status-dot"></span><span id="voice-status">Getting ready</span></div>
+      <div class="spoken-content" aria-live="polite" aria-atomic="true">
+        <p id="heard-text" class="heard-text" hidden></p>
+        <h1 id="stage-title">Make yourself at home.</h1>
+        <p id="stage-description" class="stage-description">What else can I help with?</p>
+      </div>
+      <div id="current-outcome" class="current-outcome"></div>
+      <button id="start-talking" class="start-button" type="button" hidden><svg><use href="#i-mic"/></svg>Start talking</button>
+      <p id="notice" class="notice" role="status" hidden></p>
+      <div id="suggestions" class="suggestions" aria-label="Things you can say"><span>TRY SAYING</span><button type="button" data-prompt="Open the side gate.">“Open the side gate”</button><button type="button" data-prompt="Disable the alarm.">“Disable the alarm”</button><button type="button" data-prompt="There's a delivery.">“There’s a delivery”</button></div>
+      <form id="chat-form" class="composer" hidden><label for="message" class="sr-only">Your message to Alexa</label><input id="message" name="message" maxlength="2000" placeholder="Talk to Alexa, one message at a time…" autocomplete="off" required><button id="send-button" type="submit" class="send-button" aria-label="Send request"><svg><use href="#i-arrow"/></svg></button></form>
+    </section>
+
+    <footer class="screen-footer">
+      <span id="context-label" class="context-label">Your home. Just ask.</span>
+      <div class="conversation-controls"><button id="mic-button" type="button" class="control-button" aria-label="Mute microphone" aria-pressed="true"><svg><use href="#i-mic"/></svg><span>Mic on</span></button><button id="stop-audio" type="button" class="control-button" hidden><svg><use href="#i-pause"/></svg><span>Stop speaking</span></button><button id="type-button" type="button" class="control-button" aria-expanded="false" aria-controls="chat-form"><svg><use href="#i-keyboard"/></svg><span>Type</span></button><button id="open-conversation" type="button" class="control-button"><svg><use href="#i-chat"/></svg><span>Conversation</span></button></div>
+      <span class="home-signature">A little more peace of mind.</span>
+    </footer>
+  </main>
+  <div class="listening-edge" aria-hidden="true"><span></span></div>
+
+  <dialog id="home-dialog" class="detail-dialog" aria-labelledby="home-dialog-title">
+    <div class="dialog-header"><div><p class="eyebrow">YOUR SIMULATED HOME</p><h2 id="home-dialog-title">Home details</h2></div><button type="button" class="icon-button close-dialog" aria-label="Close home details"><svg><use href="#i-close"/></svg></button></div>
+    <p class="dialog-intro">Tell Alexa what’s happening. She’ll ask for anything else she needs.</p>
+    <h3>From this conversation</h3><p id="context-details">No household context has been provided yet.</p>
+    <div class="device-grid"><article><h3>Side gate</h3><p id="gate-state">State not yet reported</p></article><article><h3>Home security</h3><p id="security-state">State not yet reported</p></article><article><h3>Front door camera</h3><p id="camera-state">State not yet reported</p></article></div><p id="snapshot-label" class="subtle">Waiting for an execution report</p>
+    <div id="pending-requests" class="pending-requests"></div>
+    <div class="section-heading"><h3>Action history</h3><button id="export-history" class="text-button" type="button" disabled><svg><use href="#i-download"/></svg>Export record</button></div><div id="activity-list" class="activity-list"><p class="subtle">Your action results will appear here.</p></div>
+    <details class="about-demo"><summary>About this simulation</summary><p>This independent Alexa-style experience uses Deepgram voice and Amazon Bedrock. Conversation supplies simulated household and camera context; it does not authenticate identity or observe a real camera. HomeBound MCP, AgentSafe, and Decionis govern every device request. Device states are execution snapshots. Approval takes place in Decionis Presence.</p><p>The microphone stays connected while enabled. Speech is sent after a pause, and listening resumes after each reply. Silence stays in your browser. The listener pauses while Alexa speaks so her reply does not become another request. Mute turns the microphone off.</p><p id="connection-details"></p></details>
+  </dialog>
+  <dialog id="conversation-dialog" class="detail-dialog" aria-labelledby="conversation-dialog-title"><div class="dialog-header"><div><p class="eyebrow">YOU AND ALEXA</p><h2 id="conversation-dialog-title">Conversation</h2></div><button type="button" class="icon-button close-dialog" aria-label="Close conversation"><svg><use href="#i-close"/></svg></button></div><div id="conversation" class="conversation" role="log" aria-label="Conversation history" aria-live="polite"></div><button id="clear-chat" class="text-button clear-button" type="button">Start a new conversation</button><button id="voice-toggle" class="text-button" type="button" aria-pressed="true">Spoken replies on</button></dialog>
+  <noscript>This simulator needs JavaScript to use conversation and voice.</noscript>
+</body>
+</html>
