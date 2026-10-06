@@ -7,6 +7,9 @@
 ## Four separate layers
 
 ```text
+Alexa-style web simulator + Deepgram voice (or CLI)
+    captures typed or spoken requests and presents execution evidence
+              ↓
 Bedrock / Alexa+ orchestration
     understands the request and selects a tool
               ↓
@@ -21,6 +24,8 @@ Ring execution adapter
 ```
 
 Bedrock is the live orchestration integration in the prototype. Alexa+ MCP add-on onboarding is a separate partner-gated deployment step. The MCP service is a real Streamable HTTP server; its handlers never call a Ring SDK. The official Decionis AgentSafe runtime runs as a separate trusted process because its supported executor is Node.js. The HomeBound application, MCP server, scenarios, and simulator remain Python.
+
+While Alexa+ partner access is unavailable, the [web simulator](web-simulator.md) supplies a full-screen Alexa-style voice experience. Deepgram handles speech recognition and synthesis on the server. A Bedrock dialogue interpreter extracts untrusted conversation facts without access to MCP; a server-side dialogue state gathers missing details, captures simulation context, and binds one exact action before the Bedrock execution loop calls MCP. No authenticated role is inferred from speech. The browser never receives execution credentials or a direct Ring route. Spoken action confirmations are derived from structured MCP results. Parent approval remains in Decionis Presence, and the UI can only recheck a saved handoff belonging to its current conversation. The listener retains one microphone connection, discards quiet buffers locally, and suspends capture during playback.
 
 ## PR phases
 

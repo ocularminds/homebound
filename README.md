@@ -5,9 +5,13 @@
 
 An AI assistant can understand a request and choose a tool. That does not make the assistant an authority to operate a door, alarm, or camera. HomeBound sends each proposed action through Decionis Execution Authority before the local Ring simulator can execute it.
 
+The prototype now includes an **Alexa-style web simulator** following Amazon's recommendation while Alexa+ MCP access is unavailable. Its full-screen interface greets you for the home-local time, starts voice on load when the browser permits it, and keeps listening between spoken replies. Say “open the side gate,” “disable the alarm,” or “there's a delivery”; the assistant carries context through follow-up questions. A browser that requires an initial audio gesture shows **Start talking**. Conversation, device snapshots, and action evidence are available from compact controls. Start it with `python -m app.cli.web --with-services` after configuring the existing local stack, then open [localhost:8300](http://127.0.0.1:8300). See [web simulator setup](docs/web-simulator.md). Alexa+ itself remains unconnected; Deepgram, Bedrock, MCP, AgentSafe, and Decionis supply the governed request path.
+
 ## Architecture
 
 ```text
+Interface      Alexa-style web simulator + Deepgram voice (or the CLI demo)
+       ↓
 Orchestration  Amazon Bedrock Converse (real tool-use integration; Alexa+ compatible MCP contract)
        ↓
 Interception   Python MCP server → official Decionis AgentSafe executor
@@ -132,6 +136,7 @@ These tests use local fixtures for external Decionis and AWS responses; they do 
 
 ## Integration status and boundaries
 
+- **Web and voice:** full-screen Alexa-style simulation with time-based greetings, continuous listening between replies, Deepgram speech, and context gathered through conversation. The dialogue interpreter cannot invoke devices; the server binds a ready request before the governed MCP path. Voice requires a server-side Deepgram key and browser microphone/audio permission. Home details shows conversation claims, execution snapshots, and action evidence. See [setup and boundaries](docs/web-simulator.md).
 - **MCP:** real Python SDK Streamable HTTP server, declarative `unlockDoor`, `disarmSystem`, and `viewStream` tools, plus a governed escalation-resume tool.
 - **Action binding:** the public MCP tools retain their declarative names. The official AgentSafe intent schema requires lowercase action identifiers, so the signed Decionis intent binds vendor-neutral capabilities `home.entry.unlock`, `home.security.disarm`, or `home.camera.view_stream`; the execution adapter maps the authorized identifier to the current Ring simulator operation. Future vendor adapters can implement the same capabilities without changing household policy.
 - **Orchestration:** real Amazon Bedrock Converse tool-use integration; the configured US Nova Lite profile is active and returned a live response. Alexa+ itself is not activated in this repo. Amazon currently limits Alexa+ add-on tooling to selected partners; the documented private CodeArtifact role assumption is still denied for the provisioned IAM user (see [FL-028](friction-log/FL-028-alexaplus-partner-access.md) and [FL-030](friction-log/FL-030-alexaplus-role-assumption-denied.md)). No Alexa+ production integration is claimed.
