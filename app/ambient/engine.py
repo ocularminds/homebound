@@ -121,7 +121,13 @@ class CanvasEngine:
                 "inventory_fresh": 0 <= now - state["inventory"]["observed_at"] < 86400,
             }
 
-    async def event(self, event: AmbientEvent, *, request_digest: str | None = None) -> str:
+    async def event(
+        self,
+        event: AmbientEvent,
+        *,
+        request_digest: str | None = None,
+        expected_playback_id: str | None = None,
+    ) -> str:
         event.validate()
         digest = request_digest or fingerprint(event.public_envelope())
         async with self.lock:
@@ -129,6 +135,12 @@ class CanvasEngine:
             if cached is not None:
                 return cached
             now, state = self.clock(), self.store.load()
+            # A browser player reports only the session it loaded. In particular,
+            # an old ad's "ended" callback must not restore an unrelated program.
+            if expected_playback_id and state["media"]["playback_id"] != expected_playback_id:
+                with self.store.db:
+                    self.store.remember(event.id, digest, "ignored", now)
+                return "ignored"
             if not -5 <= now - event.observed_at <= 300:
                 raise CanvasError(
                     "STALE_EVENT", "The ambient signal is stale or from the future.", 409
@@ -190,6 +202,29 @@ class CanvasEngine:
         """Browser input selects fixtures. It cannot claim a trusted Ring/Alexa identity."""
         async with self._simulation_lock:
             return await self._simulate(identifier, kind, value)
+
+    async def playback(self, identifier: str, playback_id: str, phase: str) -> str:
+        """Report a local video transition, bound to its selected playback session."""
+        if phase not in {"program", "break"}:
+            raise CanvasError("INVALID_PLAYBACK", "Choose a program or commercial transition.")
+        async with self._simulation_lock:
+            async with self.lock:
+                state, now = self.store.load(), self.clock()
+                sequence = state["sequences"].get("firetv-simulator", {"sequence": 0})[
+                    "sequence"
+                ] + 1
+            return await self.event(
+                AmbientEvent(
+                    identifier,
+                    "firetv-simulator",
+                    "media",
+                    sequence,
+                    now,
+                    {"scene": "park_chase", "playback_id": playback_id, "phase": phase},
+                ),
+                request_digest=fingerprint(["local-player", playback_id, phase]),
+                expected_playback_id=playback_id,
+            )
 
     async def _simulate(self, identifier: str, kind: str, value: Any) -> str:
         # Serialize fixture construction with state changes, then let event own validation.

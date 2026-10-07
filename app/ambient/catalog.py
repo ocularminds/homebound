@@ -3,6 +3,36 @@
 PEOPLE = {"mom": "Mom", "leo": "Leo", "alex": "Alex"}
 
 SCENES = {
+    "park_chase": {
+        "id": "park_chase",
+        "title": "A little hare-raising afternoon",
+        "subtitle": "One rabbit. One bulldog. Absolutely no brakes.",
+        "category": "HomeBound original · 3D cartoon",
+        "attention": "focused",
+        "art": "park_chase",
+        "items": [],
+        "recipe": None,
+        "stream": {
+            "src": "/static/media/park-chase.mp4",
+            "poster": "/static/media/park-chase-poster.jpg",
+            "captions": "/static/media/park-chase.vtt",
+            "duration": 60,
+            "breaks": [
+                {
+                    "at": 20,
+                    "src": "/static/media/movie-night-ad.mp4",
+                    "duration": 6,
+                    "title": "Make room for movie night",
+                },
+                {
+                    "at": 42,
+                    "src": "/static/media/popcorn-ad.mp4",
+                    "duration": 6,
+                    "title": "A little pause. A little popcorn.",
+                },
+            ],
+        },
+    },
     "coast": {
         "id": "coast",
         "title": "The quiet coast",

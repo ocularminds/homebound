@@ -35,6 +35,38 @@ Open [the TV canvas](http://127.0.0.1:8300/tv). **Demo signals** selects local a
 
 The surface supports directional-key focus navigation, visible focus indicators, touch, keyboard input, and responsive layouts. It contains no persistent sidebar. Notes and shopping panels are temporary parts of the media canvas.
 
+## Video and notes during commercials
+
+The video player uses separate program and commercial elements. For the planned
+one-minute cartoon, it pauses the program at 20 and 42 seconds, plays a six-second
+house promo, and returns to the actual paused position. These are explicit ad
+cues for an owned local video, not automatic detection inside another streaming
+service. The viewer can pause an ad to read a note, replay the short, enable
+sound, or enable captions. Browser autoplay starts muted.
+
+Eligible notes appear beside the commercial. They disappear locally as soon as
+it ends, before waiting for the server's program-resumed response. Audience,
+guest and freshness checks still apply. A late callback from an older playback
+session cannot start a break or restore its old program after the viewer has
+selected something else. Hidden tabs suspend playback.
+
+**Production status:** the requested rabbit-and-bulldog cartoon is awaiting the
+user's Runway connection and has not been generated. Its
+[storyboard](../media/park-chase/brief.md) and
+[generation prompts](../media/park-chase/runway-prompts.md) are prepared. The
+selector says “Film being prepared” until all five exports exist and are
+nonempty under `app/web/static/media/`: `park-chase.mp4`,
+`park-chase-poster.jpg`, `park-chase.vtt`, `movie-night-ad.mp4`, and
+`popcorn-ad.mp4`. The target is a 60-second H.264/AAC program and two six-second
+H.264/AAC promos, with a poster and English captions. Review the actual Runway
+outputs and verify their duration, codecs and sound before publishing them.
+
+Once the exports are ready, select the short in **Demo signals**, or open
+`/tv?play=park_chase`. Files are served with HTTP byte-range support and are
+included in the Python package. Video is streamed to this browser canvas;
+physical FireTV casting remains an integration task. Synthetic test clips are
+kept in the ignored test workspace and are never published as the cartoon.
+
 ## What runs where
 
 | Component | Local behavior | AWS path supplied |
@@ -171,7 +203,7 @@ Local tests cover guest and stale-audience redaction, explicit recipients, note 
 
 ```bash
 python -m pytest -q
-node --test tests/voice-activity.test.cjs tests/voice-listener.test.cjs
+node --test tests/voice-activity.test.cjs tests/voice-listener.test.cjs tests/program-player.test.cjs
 ```
 
 Use cfn-lint `1.57.2` and cfn-guard `3.2.1` (installed separately with approval). This checkout keeps them in the ignored `.homebound` directory. The rule-fetch script downloads only pinned AWS rule data with checked hashes; it does not install or run tools.

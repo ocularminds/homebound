@@ -1,7 +1,7 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
-const state = { canvas: null, busy: false, poll: null, lastSync: 0, mic: false, voiceGeneration: 0, speech: null, speechUrl: null, speechAbort: null, requestAbort: null, noteKey: "", panelKey: "", connected: false, generatedAt: 0 };
+const state = { canvas: null, busy: false, poll: null, lastSync: 0, mic: false, voiceGeneration: 0, speech: null, speechUrl: null, speechAbort: null, requestAbort: null, noteKey: "", panelKey: "", connected: false, generatedAt: 0, autoProgram: new URLSearchParams(location.search).get("play") === "park_chase", captions: false };
 const node = (tag, className = "", text = "") => { const item = document.createElement(tag); item.className = className; item.textContent = text; return item; };
 function icon(name) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -26,6 +26,8 @@ function privateNow() {
 }
 
 function renderNotes(data) {
+  // A slow server response must not leave personal notes over the resumed film.
+  if (data.media.stream && !player.activeBreak) { privateNow(); return; }
   const key = JSON.stringify(data.notes);
   if (key !== state.noteKey) {
     state.noteKey = key;
@@ -124,10 +126,21 @@ function render(data) {
   state.lastSync = performance.now(); state.connected = true;
   const config = state.canvas || {};
   state.canvas = { ...data, voice_configured: data.voice_configured ?? config.voice_configured, home_timezone: data.home_timezone || config.home_timezone };
+  player.load(data.media);
+  const videoReady = Boolean(data.programs?.park_chase?.available);
+  $("#watch-cartoon").disabled = !videoReady;
+  $("#cartoon-availability").textContent = videoReady ? "Play the cartoon · notes during commercials" : "Film being prepared";
+  if (state.autoProgram && videoReady) {
+    state.autoProgram = false;
+    if (data.media.id !== "park_chase") signal("scene", "park_chase");
+  }
+  const track = $("#program-track");
+  if (data.media.stream && track.getAttribute("src") !== data.media.stream.captions) track.src = data.media.stream.captions;
   $("#scene-background").dataset.art = data.media.art;
   $("#program-category").textContent = data.media.category;
   $("#program-title").textContent = data.media.title;
   $("#program-subtitle").textContent = data.media.subtitle;
+  $("#program-mode").textContent = data.media.stream ? data.media.stream.available ? "Original animated short" : "Film being prepared" : "Illustrated media preview";
   $("#caption-status").hidden = !data.media.captions; $("#muted-status").hidden = !data.media.muted;
   $("#audience").dataset.private = String(data.audience.private);
   $("#audience-label").textContent = data.audience.guest ? "A guest is here" : data.audience.names.length ? data.audience.names.join(" & ") + " · living room" : "Living room · audience unknown";
@@ -145,6 +158,44 @@ function render(data) {
   $("#agent-trace").replaceChildren(...data.trace.map((entry) => node("li", "", entry.agent + ": " + entry.outcome)));
   renderNotes(data); renderPanel(data); updateClock();
 }
+
+const filmTime = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+const player = new HomeBoundProgramPlayer($("#program-video"), $("#commercial-video"), {
+  report: async (transition) => {
+    try { render(await request("/api/canvas/playback", { request_id: crypto.randomUUID(), ...transition }, { signal: AbortSignal.timeout(3500) })); }
+    catch (error) { privateNow(); throw error; }
+  },
+  update: (playback) => {
+    document.body.dataset.video = String(playback.active);
+    document.body.dataset.commercial = String(playback.commercial);
+    $("#video-screen").hidden = !playback.active;
+    $("#program-video").hidden = playback.commercial;
+    $("#commercial-video").hidden = !playback.commercial;
+    $("#playback-controls").hidden = !playback.active;
+    $("#commercial-badge").hidden = !playback.commercial;
+    $("#commercial-countdown").textContent = playback.paused ? `Paused · ${Math.ceil(playback.remaining)}s remaining` : `Film returns in ${Math.ceil(playback.remaining)}s`;
+    $("#film-play").textContent = playback.ended ? "Play again" : playback.paused ? "Play" : "Pause";
+    const playingWhat = playback.commercial ? "commercial" : "film";
+    $("#film-play").setAttribute("aria-label", playback.ended ? "Replay film" : `${playback.paused ? "Play" : "Pause"} ${playingWhat}`);
+    $("#film-sound").textContent = playback.muted ? "Sound on" : "Mute";
+    $("#film-sound").setAttribute("aria-label", playback.muted ? "Turn film sound on" : "Mute film sound");
+    $("#film-progress").max = playback.duration || 60;
+    $("#film-progress").value = playback.time;
+    $("#film-time").textContent = `${filmTime(playback.time)} / ${filmTime(playback.duration)}`;
+    $("#film-break-label").textContent = playback.commercial ? "Your notes, while the film takes a break" : "Two short commercial breaks";
+    if (playback.active && !playback.commercial) privateNow();
+    if (playback.error) status(playback.error, true);
+  },
+});
+$("#program-video").volume = $("#commercial-video").volume = 0.7;
+$("#film-play").addEventListener("click", () => player.toggle());
+$("#film-sound").addEventListener("click", () => player.setMuted(!player.muted));
+$("#film-replay").addEventListener("click", () => player.replay());
+$("#film-captions").addEventListener("click", () => {
+  state.captions = !state.captions;
+  for (const track of $("#program-video").textTracks) track.mode = state.captions ? "showing" : "hidden";
+  $("#film-captions").setAttribute("aria-pressed", String(state.captions));
+});
 
 async function refresh() {
   try { render(await request("/api/canvas", undefined, { signal: AbortSignal.timeout(3500) })); }
@@ -258,10 +309,11 @@ document.addEventListener("keydown", (event) => {
   if (Number.isFinite(scored[0]?.score)) { event.preventDefault(); scored[0].item.focus(); }
 });
 document.addEventListener("visibilitychange", () => {
+  player.suspend(document.hidden);
   if (document.hidden) { privateNow(); listener.suspend(); stopSpeech(); }
   else { refresh(); resumeListening(); }
 });
-window.addEventListener("pagehide", () => { clearTimeout(state.poll); mute(); privateNow(); });
-window.addEventListener("pageshow", (event) => { if (event.persisted) { clearTimeout(state.poll); privateNow(); poll(); } });
+window.addEventListener("pagehide", () => { clearTimeout(state.poll); mute(); privateNow(); player.suspend(true); });
+window.addEventListener("pageshow", (event) => { if (event.persisted) { clearTimeout(state.poll); privateNow(); player.suspend(document.hidden); poll(); } });
 setInterval(() => { updateClock(); if (state.lastSync && performance.now() - state.lastSync > 3000) privateNow(); }, 1000);
 poll();

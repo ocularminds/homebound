@@ -27,7 +27,7 @@ homebound-ring-simulator = "app.cli.ring_simulator:main"
 homebound-web = "app.cli.web:main"
 
 [tool.setuptools.package-data]
-"app.web" = ["static/*"]
+"app.web" = ["static/*", "static/media/*"]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
