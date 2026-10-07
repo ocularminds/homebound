@@ -5,13 +5,20 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import sys
+import time
 from typing import TYPE_CHECKING
 
 import boto3
 import uvicorn
 from botocore.config import Config
 
+from app.ambient.aws import AgentCorePlanner, SqsCanvasConsumer
+from app.ambient.bedrock import BedrockCanvasPlanner
+from app.ambient.engine import CanvasEngine, CanvasService
+from app.ambient.safety import OverlaySafety
+from app.ambient.store import CanvasStore
 from app.config.settings import Settings
 from app.orchestration.bedrock import BedrockOrchestrator
 from app.web.assistant import WebAssistant
@@ -24,8 +31,8 @@ if TYPE_CHECKING:
 
 
 def build_assistant(settings: Settings, web_settings: WebSettings) -> WebAssistant:
-    def make_agent() -> BedrockOrchestrator:
-        runtime = boto3.Session(region_name=settings.aws_region).client(
+    def make_runtime():
+        return boto3.Session(region_name=settings.aws_region).client(
             "bedrock-runtime",
             config=Config(
                 retries={"total_max_attempts": 2, "mode": "adaptive"},
@@ -33,8 +40,10 @@ def build_assistant(settings: Settings, web_settings: WebSettings) -> WebAssista
                 read_timeout=60,
             ),
         )
+
+    def make_agent() -> BedrockOrchestrator:
         return BedrockOrchestrator(
-            runtime,
+            make_runtime(),
             settings.bedrock_model_id,
             settings.mcp_endpoint,
             settings.mcp_bearer_token,
@@ -52,7 +61,35 @@ def build_assistant(settings: Settings, web_settings: WebSettings) -> WebAssista
             ),
         )
 
-    return WebAssistant(settings, web_settings, make_agent)
+    canvas = CanvasService(
+        CanvasEngine(
+            CanvasStore(os.getenv("HOMEBOUND_CANVAS_DB", ".homebound/canvas.sqlite3"), time.time()),
+            OverlaySafety(
+                make_runtime,
+                os.getenv("HOMEBOUND_CANVAS_GUARDRAIL_ID", ""),
+                os.getenv("HOMEBOUND_CANVAS_GUARDRAIL_VERSION", ""),
+                os.getenv("HOMEBOUND_CANVAS_REQUIRE_GUARDRAIL", "false").lower() == "true",
+            ),
+        ),
+        BedrockCanvasPlanner(make_runtime, settings.bedrock_model_id),
+    )
+    remote_arn = os.getenv("HOMEBOUND_CANVAS_RUNTIME_ARN", "")
+    queue_url = os.getenv("HOMEBOUND_CANVAS_EVENT_QUEUE_URL", "")
+    if remote_arn or queue_url:
+        session = boto3.Session(region_name=settings.aws_region)
+        config = Config(
+            connect_timeout=5, read_timeout=65,
+            retries={"total_max_attempts": 2, "mode": "adaptive"},
+        )
+        if remote_arn:
+            canvas.planner = AgentCorePlanner(
+                session.client("bedrock-agentcore", config=config), remote_arn
+            )
+            canvas.engine.runtime_mode = "configured"
+        if queue_url:
+            canvas.consumer = SqsCanvasConsumer(session.client("sqs", config=config), queue_url)
+            canvas.engine.events_mode = "configured"
+    return WebAssistant(settings, web_settings, make_agent, canvas=canvas)
 
 
 async def start_local_services(settings: Settings, services: DemoServices) -> None:

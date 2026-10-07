@@ -1,0 +1,529 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: HomeBound ambient canvas - ordered EventBridge signals and an IAM-authenticated AgentCore supervisor; no hardware or payment authority.
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+  com.aws.cloudformation.Context:
+    arch: EventBridge custom bus -> SQS FIFO -> Lambda -> AgentCore -> SQS FIFO -> home canvas
+    must:
+      - Only normalized simulator events are supported by this deployment.
+      - Private notes remain in home storage; never publish note bodies onto the bus.
+      - Cloud delivery and model output never grant device or payment authority.
+    ref:
+      - at: docs/firetv-canvas.md
+        has: local behavior, deployment prerequisites, trust boundaries and validation
+Parameters:
+  RuntimeName:
+    Type: String
+    Default: homebound_canvas
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9_]{0,47}'
+    Description: Unique AgentCore runtime name for this environment.
+  ContainerImageUri:
+    Type: String
+    AllowedPattern: '[0-9]{12}\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com(\.cn)?/.+@sha256:[a-f0-9]{64}'
+    Description: Immutable ARM64 ECR image digest built with infra/firetv/Dockerfile.
+  EcrRepositoryArn:
+    Type: String
+    AllowedPattern: 'arn:aws(-[a-z]+)*:ecr:[a-z0-9-]+:[0-9]{12}:repository/.+'
+    Description: Repository containing ContainerImageUri.
+  ModelId:
+    Type: String
+    MinLength: 1
+    Description: Enabled Bedrock Converse model or inference profile with tool and image support.
+  ModelResourceArns:
+    Type: CommaDelimitedList
+    Description: Exact model and inference profile ARNs required by ModelId, including routed model regions.
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Existing private subnets with access to Bedrock Runtime and required AWS endpoints.
+  RuntimeSecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: Existing security groups with reviewed egress; the stack opens no ingress.
+  WorkerArtifactBucket:
+    Type: String
+    AllowedPattern: '[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]'
+    Description: Private versioned artifact bucket in this region.
+  WorkerArtifactKey:
+    Type: String
+    MinLength: 1
+    Description: Zip containing app and the pinned boto3 worker dependencies.
+  WorkerArtifactVersion:
+    Type: String
+    MinLength: 1
+    Description: Immutable S3 object version for the worker zip.
+  EnableConsumer:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Enable only after verifying runtime health, model access and log delivery.
+Conditions:
+  ConsumerEnabled: !Equals [!Ref EnableConsumer, 'true']
+Resources:
+  DataKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Encrypt retained event data and application logs with an account-owned key.
+        must: [Retain the key while retained queues or logs exist.]
+    Properties:
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AccountAdministration
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: '*'
+          - Sid: EventBusEncryption
+            Effect: Allow
+            Principal: {Service: events.amazonaws.com}
+            Action: [kms:Decrypt, kms:Encrypt, kms:GenerateDataKeyWithoutPlaintext, kms:ReEncryptFrom, kms:ReEncryptTo]
+            Resource: '*'
+            Condition:
+              StringEquals: {aws:SourceAccount: !Ref 'AWS::AccountId'}
+              ArnLike:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:event-busv2/${AWS::StackName}-ambient/*
+              StringLike:
+                kms:EncryptionContext:aws:events:event-busv2:arn: !Sub arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:event-busv2/${AWS::StackName}-ambient/*
+          - Sid: EncryptedLogs
+            Effect: Allow
+            Principal:
+              Service: !Sub logs.${AWS::Region}.amazonaws.com
+            Action: [kms:Encrypt, kms:Decrypt, kms:ReEncrypt*, kms:GenerateDataKey*, kms:DescribeKey]
+            Resource: '*'
+            Condition:
+              ArnLike:
+                kms:EncryptionContext:aws:logs:arn: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/homebound/${AWS::StackName}/*
+  AmbientBus:
+    Type: AWS::EventsV2::EventBus
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Retained custom application events support ordered subscribers and replay.
+        must: [Use the V2 raw JSON contract, keep household note text off the bus.]
+    Properties:
+      Name: !Sub ${AWS::StackName}-ambient
+      Description: Normalized HomeBound ambient signals
+      StorageConfiguration: {RetentionPeriodInDays: 1}
+      EncryptionConfiguration: {KmsKeyIdentifier: !GetAtt DataKey.Arn}
+  DeliveryFailures:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Retain failed bus deliveries for diagnosis.
+        must: [Delivery role must be able to write and encrypt failure records.]
+    Properties:
+      KmsMasterKeyId: !GetAtt DataKey.Arn
+      MessageRetentionPeriod: 1209600
+  ProcessingFailures:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Isolate worker and receiver failures without retrying them forever.
+        must: [FIFO redrive target, retain source event IDs for investigation.]
+    Properties:
+      FifoQueue: true
+      KmsMasterKeyId: !GetAtt DataKey.Arn
+      MessageRetentionPeriod: 1209600
+  InputQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Absorb model cold starts while preserving order within each home.
+        must: [Visibility timeout at least six times worker timeout, preserve message IDs.]
+    Properties:
+      FifoQueue: true
+      KmsMasterKeyId: !GetAtt DataKey.Arn
+      VisibilityTimeout: 720
+      MessageRetentionPeriod: 86400
+      RedrivePolicy: {deadLetterTargetArn: !GetAtt ProcessingFailures.Arn, maxReceiveCount: 3}
+  OutputQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Home receiver consumes validated routed events and commits locally before acknowledgment.
+        must: [Hints are advisory; recalculate audience at the receiver.]
+    Properties:
+      FifoQueue: true
+      KmsMasterKeyId: !GetAtt DataKey.Arn
+      VisibilityTimeout: 30
+      MessageRetentionPeriod: 86400
+      RedrivePolicy: {deadLetterTargetArn: !GetAtt ProcessingFailures.Arn, maxReceiveCount: 5}
+  QueueTlsPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Require encrypted transport for every event queue.
+        must: [Keep the explicit non-TLS deny.]
+    Properties:
+      Queues: [!Ref InputQueue, !Ref OutputQueue, !Ref DeliveryFailures, !Ref ProcessingFailures]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: sqs:*
+            Resource: [!GetAtt InputQueue.Arn, !GetAtt OutputQueue.Arn, !GetAtt DeliveryFailures.Arn, !GetAtt ProcessingFailures.Arn]
+            Condition: {Bool: {aws:SecureTransport: 'false'}}
+  DeliveryRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: EventBridge may only deliver to the input and delivery failure queues.
+        must: [Trust only this account's subscriber namespace.]
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: events.amazonaws.com}
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals: {aws:SourceAccount: !Ref 'AWS::AccountId'}
+              ArnLike: {aws:SourceArn: !Sub 'arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:subscriber/${AWS::StackName}-supervisor/*'}
+      Policies:
+        - PolicyName: DeliverAmbientSignal
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: [!GetAtt InputQueue.Arn, !GetAtt DeliveryFailures.Arn]
+              - Effect: Allow
+                Action: [kms:Decrypt, kms:GenerateDataKey]
+                Resource: !GetAtt DataKey.Arn
+  SupervisorSubscriber:
+    Type: AWS::EventsV2::Subscriber
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Preserve event shape and order through the supervisor queue.
+        must: [RAW delivery must match PutRawEvents, deploy replacements alongside existing subscribers before removal.]
+    Properties:
+      Name: !Sub ${AWS::StackName}-supervisor
+      EventBusArn: !Ref AmbientBus
+      Type: FIFO
+      StartingPosition: LATEST
+      State: RUNNING
+      FilterConfiguration:
+        Filters:
+          - Scope: DATA
+            Pattern: '{"version":[1],"home_id":["local-home"],"kind":["presence","media","inventory"]}'
+      Transformer: {Type: RAW}
+      InvokeConfiguration:
+        TargetArn: !GetAtt InputQueue.Arn
+        RoleArn: !GetAtt DeliveryRole.Arn
+        SqsParameters:
+          MessageGroupId: '{% $events.Data.home_id %}'
+          MessageDeduplicationId: '{% $events.Data.id %}'
+      RetryPolicy: {MaxRetryAttempts: 5, MaxEventAgeInSeconds: 300}
+      OnFailureConfiguration: {Arn: !GetAtt DeliveryFailures.Arn}
+  CanvasGuardrail:
+    Type: AWS::Bedrock::Guardrail
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Screen text separately from audience authorization before display.
+        must: [Publish a numbered version; any intervention or outage holds content.]
+    Properties:
+      Name: !Sub ${AWS::StackName}-canvas
+      Description: Household canvas content screening
+      BlockedInputMessaging: This request cannot appear on the shared display.
+      BlockedOutputsMessaging: This content cannot appear on the shared display.
+      ContentPolicyConfig:
+        FiltersConfig:
+          - {Type: HATE, InputStrength: HIGH, OutputStrength: HIGH}
+          - {Type: SEXUAL, InputStrength: HIGH, OutputStrength: HIGH}
+          - {Type: VIOLENCE, InputStrength: HIGH, OutputStrength: HIGH}
+          - {Type: MISCONDUCT, InputStrength: HIGH, OutputStrength: HIGH}
+      SensitiveInformationPolicyConfig:
+        PiiEntitiesConfig:
+          - {Type: EMAIL, Action: BLOCK}
+          - {Type: PHONE, Action: BLOCK}
+          - {Type: CREDIT_DEBIT_CARD_NUMBER, Action: BLOCK}
+          - {Type: US_SOCIAL_SECURITY_NUMBER, Action: BLOCK}
+  PublishedGuardrail:
+    Type: AWS::Bedrock::GuardrailVersion
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Pin an immutable screening policy for runtime calls.
+        must: [Create a new version resource when changing the guardrail configuration.]
+    Properties:
+      GuardrailIdentifier: !GetAtt CanvasGuardrail.GuardrailArn
+      Description: Initial ambient canvas screening policy
+  RuntimeRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Inference and content screening only; no device, payment, or note storage access.
+        must: [Scope model resources explicitly, keep grant-bearing credentials outside the runtime.]
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: bedrock-agentcore.amazonaws.com}
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals: {aws:SourceAccount: !Ref 'AWS::AccountId'}
+              ArnLike: {aws:SourceArn: !Sub 'arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:runtime/${RuntimeName}-*'}
+      Policies:
+        - PolicyName: InferAndScreen
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: !Ref ModelResourceArns
+              - Effect: Allow
+                Action: bedrock:ApplyGuardrail
+                Resource: !GetAtt CanvasGuardrail.GuardrailArn
+              - Effect: Allow
+                Action: [ecr:BatchGetImage, ecr:GetDownloadUrlForLayer, ecr:BatchCheckLayerAvailability]
+                Resource: !Ref EcrRepositoryArn
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action: [logs:CreateLogGroup, logs:DescribeLogStreams, logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/runtimes/${RuntimeName}-*:*
+  SupervisorRuntime:
+    Type: AWS::BedrockAgentCore::Runtime
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Custom HTTP supervisor reuses the same bounded agents as the local canvas.
+        must: [ARM64 container, IAM default inbound authorization, VPC egress reviewed before deployment.]
+    Properties:
+      AgentRuntimeName: !Ref RuntimeName
+      AgentRuntimeArtifact: {ContainerConfiguration: {ContainerUri: !Ref ContainerImageUri}}
+      Description: HomeBound ambient supervisor with Media Context and Shopping agents
+      RoleArn: !GetAtt RuntimeRole.Arn
+      ProtocolConfiguration: HTTP
+      NetworkConfiguration:
+        NetworkMode: VPC
+        NetworkModeConfig:
+          Subnets: !Ref PrivateSubnetIds
+          SecurityGroups: !Ref RuntimeSecurityGroupIds
+      EnvironmentVariables:
+        BEDROCK_MODEL_ID: !Ref ModelId
+        HOMEBOUND_CANVAS_GUARDRAIL_ID: !GetAtt CanvasGuardrail.GuardrailId
+        HOMEBOUND_CANVAS_GUARDRAIL_VERSION: !GetAtt PublishedGuardrail.Version
+  SupervisorEndpoint:
+    Type: AWS::BedrockAgentCore::RuntimeEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Pin a reviewable endpoint to the deployed runtime version.
+        must: [Verify endpoint READY and health before enabling event delivery.]
+    Properties:
+      AgentRuntimeId: !GetAtt SupervisorRuntime.AgentRuntimeId
+      AgentRuntimeVersion: !GetAtt SupervisorRuntime.AgentRuntimeVersion
+      Name: canvas
+      Description: HomeBound canvas supervisor endpoint
+  RuntimeApplicationLogs:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Encrypt application telemetry without putting household content in source code logs.
+        must: [Do not enable raw model invocation logging for household notes.]
+    Properties:
+      LogGroupName: !Sub /homebound/${AWS::StackName}/supervisor
+      KmsKeyId: !GetAtt DataKey.Arn
+      RetentionInDays: 14
+  RuntimeLogSource:
+    Type: AWS::Logs::DeliverySource
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Route AgentCore application logs to the encrypted destination.
+        must: [Keep all payload-bearing telemetry under the retained KMS key.]
+    Properties:
+      Name: !Sub ${AWS::StackName}-supervisor
+      ResourceArn: !GetAtt SupervisorRuntime.AgentRuntimeArn
+      LogType: APPLICATION_LOGS
+  RuntimeLogDestination:
+    Type: AWS::Logs::DeliveryDestination
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Use a dedicated encrypted log group for this environment.
+        must: [Do not share a public log destination.]
+    Properties:
+      Name: !Sub ${AWS::StackName}-supervisor
+      DestinationResourceArn: !GetAtt RuntimeApplicationLogs.Arn
+      OutputFormat: json
+  RuntimeLogDelivery:
+    Type: AWS::Logs::Delivery
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Connect the supervised runtime's application logs to the destination.
+        must: [Verify delivery after deployment.]
+    Properties:
+      DeliverySourceName: !Ref RuntimeLogSource
+      DeliveryDestinationArn: !GetAtt RuntimeLogDestination.Arn
+  WorkerLogs:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Retain worker diagnostics without logging event bodies.
+        must: [Keep KMS encryption and bounded retention.]
+    Properties:
+      LogGroupName: !Sub /homebound/${AWS::StackName}/worker
+      KmsKeyId: !GetAtt DataKey.Arn
+      RetentionInDays: 14
+  WorkerRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Bridge a single input queue, runtime and output queue.
+        must: [No hardware or payment permissions, no arbitrary runtime invocation.]
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: RouteAmbientSignals
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes]
+                Resource: !GetAtt InputQueue.Arn
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt OutputQueue.Arn
+              - Effect: Allow
+                Action: bedrock-agentcore:InvokeAgentRuntime
+                Resource:
+                  - !GetAtt SupervisorRuntime.AgentRuntimeArn
+                  - !GetAtt SupervisorEndpoint.AgentRuntimeEndpointArn
+              - Effect: Allow
+                Action: [kms:Decrypt, kms:GenerateDataKey]
+                Resource: !GetAtt DataKey.Arn
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt WorkerLogs.Arn
+  Worker:
+    Type: AWS::Lambda::Function
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: SQS isolates model latency from the media stream; the worker transports data only.
+        must: [Batch size one with partial failure reporting; no payload logging.]
+    Properties:
+      Runtime: python3.12
+      Architectures: [arm64]
+      Handler: app.ambient.aws_worker.handler
+      Code:
+        S3Bucket: !Ref WorkerArtifactBucket
+        S3Key: !Ref WorkerArtifactKey
+        S3ObjectVersion: !Ref WorkerArtifactVersion
+      Role: !GetAtt WorkerRole.Arn
+      Timeout: 120
+      MemorySize: 256
+      ReservedConcurrentExecutions: 2
+      LoggingConfig: {LogGroup: !Ref WorkerLogs, LogFormat: JSON}
+      Environment:
+        Variables:
+          CANVAS_RUNTIME_ARN: !GetAtt SupervisorRuntime.AgentRuntimeArn
+          CANVAS_OUTPUT_QUEUE_URL: !Ref OutputQueue
+  WorkerSubscription:
+    Type: AWS::Lambda::EventSourceMapping
+    DependsOn: SupervisorEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Poll the ordered input queue with explicit per-record failures.
+        must: [Enable only after the runtime health and permissions are validated.]
+    Properties:
+      EventSourceArn: !GetAtt InputQueue.Arn
+      FunctionName: !Ref Worker
+      BatchSize: 1
+      FunctionResponseTypes: [ReportBatchItemFailures]
+      Enabled: !If [ConsumerEnabled, true, false]
+  WorkerErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Surface invocation failures for the deployment operator.
+        must: [Wire notifications to an approved destination during deployment.]
+    Properties:
+      AlarmDescription: HomeBound ambient worker invocation failures
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{Name: FunctionName, Value: !Ref Worker}]
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+  ProcessingFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Partial batch failures return successful Lambda invocations, so alarm on exhausted retries too.
+        must: [Investigate without replaying stale presence or media observations.]
+    Properties:
+      AlarmDescription: HomeBound ambient events exhausted processing retries
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions: [{Name: QueueName, Value: !GetAtt ProcessingFailures.QueueName}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+  DeliveryFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Surface exhausted EventBridge deliveries separately from worker failures.
+        must: [Wire notifications to an approved destination during deployment.]
+    Properties:
+      AlarmDescription: HomeBound ambient events exhausted delivery retries
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions: [{Name: QueueName, Value: !GetAtt DeliveryFailures.QueueName}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+Outputs:
+  EventBusArn:
+    Description: Configure the trusted event publisher with this V2 bus ARN.
+    Value: !Ref AmbientBus
+  RuntimeArn:
+    Description: HOMEBOUND_CANVAS_RUNTIME_ARN for remote conversation planning.
+    Value: !GetAtt SupervisorRuntime.AgentRuntimeArn
+  OutputQueueUrl:
+    Description: HOMEBOUND_CANVAS_EVENT_QUEUE_URL for the local canvas receiver.
+    Value: !Ref OutputQueue
+  OutputQueueArn:
+    Description: Scope the home receiver's SQS read and delete permissions to this ARN.
+    Value: !GetAtt OutputQueue.Arn
+  GuardrailId:
+    Description: HOMEBOUND_CANVAS_GUARDRAIL_ID for the local content screen.
+    Value: !GetAtt CanvasGuardrail.GuardrailId
+  GuardrailVersion:
+    Description: HOMEBOUND_CANVAS_GUARDRAIL_VERSION; never use DRAFT.
+    Value: !GetAtt PublishedGuardrail.Version
+  DataKeyArn:
+    Description: Scope publisher and receiver KMS permissions to this key.
+    Value: !GetAtt DataKey.Arn

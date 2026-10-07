@@ -1,0 +1,38 @@
+{
+  "repository": "aws-cloudformation/aws-guard-rules-registry",
+  "commit": "7f7340c26ae5d5e8874651dbffeb12e0e9f505b6",
+  "rules": [
+    {
+      "path": "rules/aws/aws_kms/cmk_backing_key_rotation_enabled.guard",
+      "sha256": "061f8ffefe2ad351cb788a1b8afc442cc257c7ac51169cf40a19bdd1854cb981"
+    },
+    {
+      "path": "rules/aws/amazon_sqs/sqs_queue_kms_master_key_id_rule.guard",
+      "sha256": "37f17b5ba840c065a5f946e0bcc01b48af3700b46fcd75ffcb6bbd8aee07b27c"
+    },
+    {
+      "path": "rules/aws/amazon_sqs/sqs_queuepolicy_no_wildcard_principal.guard",
+      "sha256": "3c1ac165a20577337be0a1306138654e5493f95bc6417405b3cb9164c79b8464"
+    },
+    {
+      "path": "rules/aws/iam/iam_role_no_wildcard_actions_on_permissions.guard",
+      "sha256": "d78155e7354af29dd47d525e51792201244994f5f05384007f3fe2fca9415c84"
+    },
+    {
+      "path": "rules/aws/iam/iam_role_no_wildcard_resource_on_passrole.guard",
+      "sha256": "bf98d69c7fc4652083eb0bb377719fafa40e7914ace72630e1a1100953a2663e"
+    },
+    {
+      "path": "rules/aws/iam/iam_role_administrator_access_policy_rule.guard",
+      "sha256": "c154a3733c1fafd342a58dea1678220d74dd4891e96e8c6828d815bd0bacc142"
+    },
+    {
+      "path": "rules/aws/lambda/lambda_concurrency_check.guard",
+      "sha256": "caba407de9e3cb4dbfad368b2ccf2b1cb0e0c9c55004bedb2263c4731aaa9087"
+    },
+    {
+      "path": "rules/aws/lambda/lambda_function_public_access_prohibited.guard",
+      "sha256": "d2b18fed0d26a96afc43a48b164047e3fe22bcb1043bc1ad3625d72ee0ebc5cd"
+    }
+  ]
+}

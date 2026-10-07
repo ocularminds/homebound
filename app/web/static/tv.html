@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#14252a">
+  <meta name="description" content="HomeBound's ambient FireTV canvas. The right thing, at the right moment.">
+  <title>HomeBound · FireTV canvas</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/tv.css">
+  <script src="/static/voice-activity.js" defer></script>
+  <script src="/static/voice-listener.js" defer></script>
+  <script src="/static/program-player.js" defer></script>
+  <script src="/static/tv.js" defer></script>
+</head>
+<body>
+  <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="tv-note" viewBox="0 0 24 24"><path d="M5 3h14a2 2 0 0 1 2 2v11l-5 5H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm16 13h-5v5M7 8h10M7 12h7"/></symbol>
+    <symbol id="tv-leaf" viewBox="0 0 24 24"><path d="M20 3C7 1 1 8 5 16s16 3 15-13ZM4 21 16 8"/></symbol>
+    <symbol id="tv-book" viewBox="0 0 24 24"><path d="M12 5C8 2 4 3 2 4v15c4-2 7-1 10 1 3-2 6-3 10-1V4c-2-1-6-2-10 1Zm0 0v15"/></symbol>
+    <symbol id="tv-cart" viewBox="0 0 24 24"><path d="M2 3h3l3 13h11l3-9H6M9 21h.01M18 21h.01"/></symbol>
+    <symbol id="tv-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></symbol>
+    <symbol id="tv-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+    <symbol id="tv-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="tv-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Zm-4 9 3 3 5-6"/></symbol>
+    <symbol id="tv-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4 4l2 2m12 12 2 2M4 20l2-2M18 6l2-2"/></symbol>
+    <symbol id="tv-home" viewBox="0 0 24 24"><path d="m2 11 10-9 10 9M5 9v12h14V9m-10 12v-8h6v8"/></symbol>
+    <symbol id="tv-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  </svg>
+  <div id="scene-background" class="scene-background" aria-hidden="true"></div>
+  <div id="video-screen" class="video-screen" hidden>
+    <video id="program-video" playsinline preload="metadata" muted aria-label="A little hare-raising afternoon"><track id="program-track" kind="captions" srclang="en" label="English"></video>
+    <video id="commercial-video" playsinline preload="none" muted hidden aria-label="Demo commercial"></video>
+  </div>
+  <div class="atmosphere" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="HomeBound Alexa screen"><span class="brand-mark" aria-hidden="true"></span>HomeBound<span class="brand-divider"></span><span class="canvas-label">FireTV canvas</span></a>
+    <div id="audience" class="audience"><span class="presence-dot"></span><span id="audience-label">Living room</span></div>
+    <div class="top-right"><button id="about-open" class="simulation-label" type="button">Simulated home</button><time id="clock">--:--</time></div>
+  </header>
+
+  <main id="canvas" aria-label="Living room canvas">
+    <div id="commercial-badge" class="commercial-badge" role="status" hidden><span class="presence-dot"></span><span>Demo commercial</span><span id="commercial-countdown" aria-hidden="true"></span><span class="commercial-notes-label">A moment for your notes</span></div>
+    <section id="program" class="program" aria-labelledby="program-title">
+      <p class="eyebrow" id="program-category">SLOW TELEVISION</p>
+      <h1 id="program-title">The quiet coast</h1>
+      <p class="program-subtitle" id="program-subtitle">A journey north</p>
+      <div class="program-status"><span class="play-mark" aria-hidden="true"></span><span id="program-mode">Illustrated media preview</span><span id="caption-status" class="cc" hidden>CC</span><span id="muted-status" hidden>Sound off</span></div>
+    </section>
+
+    <section id="notes" class="notes" aria-label="Notes for the current audience" aria-live="polite"></section>
+    <div id="note-waiting" class="quiet-indicator" hidden><svg><use href="#tv-note"/></svg><span>A note for a quieter moment</span></div>
+
+    <section id="dashboard" class="dashboard" aria-labelledby="dashboard-title" hidden>
+      <div class="dashboard-heading"><div><p class="eyebrow">WHILE THERE'S A BREAK</p><h2 id="dashboard-title">A moment for home.</h2></div><span class="return-badge"><span class="presence-dot"></span>We'll return when play resumes</span></div>
+      <div class="dashboard-grid">
+        <article class="camera-card"><div class="camera-illustration"><span class="house-roof"></span><span class="house-wall"></span><span class="house-door"></span><span class="house-path"></span></div><div class="camera-copy"><span class="eyebrow">FRONT DOOR</span><h3>All in view. Soon.</h3><p>Connect a governed Ring feed to see your entrance here.</p><span class="small-label">Camera not connected</span></div></article>
+        <article class="weather-card"><svg><use href="#tv-sun"/></svg><div><span class="eyebrow">WEATHER PREVIEW</span><h3>12°</h3><p>A clear evening</p><span class="small-label">Demo weather · Stockholm</span></div></article>
+      </div>
+    </section>
+
+    <section id="panel" class="canvas-panel" aria-labelledby="panel-title" hidden>
+      <div class="panel-header"><div><p id="panel-eyebrow" class="eyebrow"></p><h2 id="panel-title"></h2></div><button id="panel-close" class="icon-button" aria-label="Close canvas panel" type="button"><svg><use href="#tv-close"/></svg></button></div>
+      <div id="panel-content"></div>
+    </section>
+  </main>
+
+  <footer class="bottom-area">
+    <div id="playback-controls" class="playback-controls" aria-label="Film playback" hidden>
+      <div class="transport-buttons"><button id="film-play" type="button" aria-label="Pause film">Pause</button><button id="film-sound" type="button" aria-label="Turn film sound on">Sound on</button><button id="film-replay" type="button">Replay</button><button id="film-captions" type="button" aria-pressed="false">CC</button></div>
+      <div class="film-progress"><progress id="film-progress" value="0" max="60" aria-label="Film progress"></progress><span id="film-time">0:00 / 1:00</span></div>
+      <span id="film-break-label" class="film-break-label">Two short commercial breaks</span>
+    </div>
+    <div class="context-line"><span id="privacy-indicator"><svg><use href="#tv-shield"/></svg><span id="privacy-label">Personal notes stay private</span></span><button id="demo-open" class="text-button" type="button">Demo signals <span aria-hidden="true">↗</span></button></div>
+    <div class="dock">
+      <nav class="shortcuts" aria-label="Canvas actions">
+        <button id="note-open" class="shortcut" type="button"><svg><use href="#tv-note"/></svg><span>Leave a note</span></button>
+        <button class="shortcut" data-action="recipes" type="button"><svg><use href="#tv-leaf"/></svg><span>Recipes</span></button>
+        <button class="shortcut" data-action="reading" type="button"><svg><use href="#tv-book"/></svg><span>Reading mode</span></button>
+        <button id="cart-button" class="shortcut cart-shortcut" data-action="checkout" type="button" aria-label="Review draft cart"><svg><use href="#tv-cart"/></svg><span id="cart-count">0</span></button>
+      </nav>
+      <form id="ask-form" class="ask-form"><label for="ask" class="sr-only">Ask the canvas</label><span class="alexa-spark" aria-hidden="true"></span><input id="ask" maxlength="1000" autocomplete="off" placeholder="Ask Alexa about this moment…"><button id="send" class="icon-button send" type="submit" aria-label="Send request"><svg><use href="#tv-arrow"/></svg></button></form>
+      <button id="mic" class="icon-button mic" type="button" aria-label="Turn microphone on" aria-pressed="false"><svg><use href="#tv-mic"/></svg></button>
+    </div>
+    <div class="under-dock"><p id="status" role="status">The right thing, at the right moment.</p><a href="/">Open Alexa <span aria-hidden="true">↗</span></a></div>
+  </footer>
+
+  <dialog id="note-dialog" aria-labelledby="note-dialog-title">
+    <div class="dialog-heading"><div><p class="eyebrow">A LITTLE SOMETHING TO REMEMBER</p><h2 id="note-dialog-title">Leave it with HomeBound.</h2></div><button class="icon-button close-dialog" type="button" aria-label="Close note form"><svg><use href="#tv-close"/></svg></button></div>
+    <form id="note-form"><label for="note-recipient">Who is it for?</label><select id="note-recipient"><option value="Mom">Mom</option><option value="Leo">Leo</option><option value="Alex">Alex</option><option value="everyone in the household">Everyone in the household</option></select><label for="note-text">Your note</label><textarea id="note-text" maxlength="360" rows="3" placeholder="I took the dog out. Enjoy your evening." required></textarea><p class="form-hint">Personal notes appear only when the recipient is alone. Movie moments wait for a break. Notes expire after a day.</p><button class="primary-button" type="submit">Leave a note <svg><use href="#tv-arrow"/></svg></button></form>
+  </dialog>
+
+  <dialog id="demo-dialog" aria-labelledby="demo-dialog-title">
+    <div class="dialog-heading"><div><p class="eyebrow">TRY AN AMBIENT MOMENT</p><h2 id="demo-dialog-title">A home that responds.</h2></div><button class="icon-button close-dialog" type="button" aria-label="Close demo signals"><svg><use href="#tv-close"/></svg></button></div>
+    <p class="form-hint">These controls emit local demo signals. Ring, Alexa+ and FireTV hardware are not connected.</p>
+    <p class="control-label">Who just arrived?</p><div class="signal-options"><button data-signal="presence" data-value="leo" type="button">Leo</button><button data-signal="presence" data-value="mom" type="button">Mom</button><button data-signal="presence" data-value="alex" type="button">Alex</button><button data-signal="presence" data-value="guest" type="button">A guest joins</button><button data-signal="presence" data-value="empty" type="button">Room empty</button></div>
+    <p class="control-label">What's on?</p><div class="scene-options"><button id="watch-cartoon" data-signal="scene" data-value="park_chase" type="button" disabled>A little hare-raising afternoon<span id="cartoon-availability">Film being prepared</span></button><button data-signal="scene" data-value="coast" type="button">The quiet coast<span>Casual viewing</span></button><button data-signal="scene" data-value="cooking" type="button">The weekend table<span>Recipes & pantry</span></button><button data-signal="scene" data-value="movie" type="button">After the last light<span>Focus & scene shopping</span></button><button data-signal="scene" data-value="game" type="button">Matchday<span>Live sport preview</span></button></div>
+    <p class="control-label">Let the moment change</p><div class="signal-options"><button data-signal="phase" data-value="break" type="button">Commercial break</button><button data-signal="phase" data-value="program" type="button">Program resumes</button><button data-action="dashboard" id="dashboard-toggle" type="button">Turn break dashboard off</button></div>
+    <p class="control-label">Pantry snapshot</p><div class="signal-options"><button id="pantry-restock" type="button">Restock olive oil</button><button id="pantry-missing" type="button">Olive oil runs out</button></div>
+  </dialog>
+
+  <dialog id="about-dialog" aria-labelledby="about-title">
+    <div class="dialog-heading"><div><p class="eyebrow">BUILT AROUND THE MOMENT</p><h2 id="about-title">One canvas. Three agents.</h2></div><button class="icon-button close-dialog" type="button" aria-label="Close integration details"><svg><use href="#tv-close"/></svg></button></div>
+    <p>Amazon Bedrock interprets requests. The Context agent selects eligible notes, the Shopping agent joins scene metadata with the pantry, and the Media agent adapts the canvas to playback.</p>
+    <dl class="integration-list"><dt>Ambient signals & media</dt><dd>Local simulation · illustrated scenes and video playback</dd><dt>Spatial memory</dt><dd>Private local SQLite storage · 24-hour notes</dd><dt>Content screening</dt><dd id="screening-mode">Local demo screening</dd><dt>AgentCore & EventBridge</dt><dd id="cloud-mode">Deployment adapters included; not deployed</dd><dt>Room controls</dt><dd>Preview only; physical execution needs a governed adapter</dd><dt>Amazon Pay</dt><dd>Not connected · draft cart only</dd></dl>
+    <p class="form-hint">Audience checks run before note delivery. Bedrock Guardrails adds content screening when configured; local demo screening is not equivalent to it. Presence signals expire after five minutes. Unavailable connections never become approval.</p>
+    <h3 class="control-label">Latest orchestration</h3><ol id="agent-trace" class="agent-trace"></ol>
+  </dialog>
+  <noscript>This canvas needs JavaScript. The Alexa interface remains available at the home page.</noscript>
+</body>
+</html>

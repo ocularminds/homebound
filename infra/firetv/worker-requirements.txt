@@ -1,0 +1,9 @@
+# Pure Python dependencies for the Lambda bridge. Package these with the function;
+# do not depend on the older SDK bundled into an AWS Lambda runtime.
+boto3==1.43.106
+botocore==1.43.106
+jmespath==1.1.0
+s3transfer==0.19.2
+python-dateutil==2.9.0.post0
+six==1.17.0
+urllib3==2.8.0

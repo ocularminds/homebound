@@ -1,0 +1,8 @@
+# The runtime build context contains source and public assets only.
+**
+!pyproject.toml
+!app/
+!app/**
+app/**/__pycache__/
+app/**/*.pyc
+app/**/.env*

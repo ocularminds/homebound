@@ -29,6 +29,39 @@ While Alexa+ partner access is unavailable, the [web simulator](web-simulator.md
 
 The [escalation interface](escalation.md) presents the saved request, returned approval status, and the earlier of the approval and intent expiries. Quiet browser checks keep the microphone connected and recording; a terminal result is spoken once. Voice claims of parental approval only select a session-owned handoff to recheck. The MCP client serializes resumes and retains handoffs through temporary authority failures. Unknown execution stops automatic checks instead of inviting a retry. The live Decionis tenant currently lacks its managed Presence connection, so a real parent ceremony remains unvalidated.
 
+## Ambient canvas and cognitive orchestration
+
+The [FireTV canvas](firetv-canvas.md) shares the Alexa simulator's home state through a separate `/tv` surface. Bedrock extracts one typed proposal from the latest request and public media context. Three bounded specialists handle note eligibility, media layout, and scene/pantry joins. They return data for fixed UI components; they cannot supply scripts, URLs, payment instructions, identity grants, or physical execution.
+
+```mermaid
+flowchart TD
+    Voice[Alexa simulator + Deepgram] --> Planner[Bedrock Converse supervisor]
+    Signals[Normalized Ring / Alexa / FireTV adapter events] --> Bus[EventBridge custom bus]
+    Bus --> Input[SQS FIFO + Lambda bridge]
+    Input --> Runtime[AgentCore HTTP supervisor]
+    Runtime --> Output[SQS FIFO home receiver]
+    Planner --> Context[Context agent]
+    Planner --> Media[Media agent]
+    Planner --> Shopping[Shopping agent]
+    Output --> Context
+    Output --> Media
+    Output --> Shopping
+    Context --> Projection[Audience-filtered canvas projection]
+    Media --> Projection
+    Shopping --> Projection
+    Screen[Published Bedrock Guardrails] --> Context
+    Projection --> TV[FireTV browser canvas]
+    Voice --> MCP[Consequential action proposal via MCP]
+    MCP --> Safe[AgentSafe + Decionis / Presence]
+    Safe --> Ring[Authorized Ring simulator adapter]
+```
+
+This diagram includes the deployment path. Locally, simulated events go directly to the same specialist/receiver logic, and Converse runs from the web server. Setting the optional runtime ARN routes conversation planning through AgentCore; setting the output queue URL starts its SQS receiver. The cloud path carries normalized ambient events, never private note bodies. Typed event routing does not wait for an LLM, so model inference cannot stall local playback or guest redaction. Both transports recalculate current audience policy at the home receiver instead of trusting a delayed UI hint.
+
+Spatial memory currently means private, durable SQLite notes with explicit recipients and expiry. It is not AgentCore Memory or inferred identity. A future authenticated, consented sensor adapter must establish a home/subject binding before replacing the simulated audience. Guardrails screens content; it does not authenticate occupants. The local runtime uses conservative demo screening unless a published Guardrails policy is configured.
+
+Room orchestration currently previews five fixed capabilities and can restore the prior preview. To operate a physical TV or light, implement each capability behind the existing AgentSafe/Decionis execution boundary, with exact targets, returned execution evidence, failure handling, and state reconciliation. A dashboard event, model interpretation, or cart proposal cannot substitute for that authority. No new physical or payment capability is exposed by this phase.
+
 ## PR phases
 
 1. **Orchestration and MCP contract** — Python package, Streamable HTTP MCP endpoint, Bedrock Converse tool-use loop, schemas, and fail-closed tool responses. No device can execute in this phase.
