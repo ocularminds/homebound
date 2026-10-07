@@ -37,7 +37,7 @@ class ActionResult:
     """Structured result returned through MCP to the orchestration layer."""
 
     decision: Literal["ALLOW", "ESCALATE", "BLOCK", "AUTHORITY_UNAVAILABLE"]
-    execution: Literal["PERFORMED", "NOT_PERFORMED"]
+    execution: Literal["PERFORMED", "NOT_PERFORMED", "UNKNOWN"]
     message: str
     correlation_id: str
     decision_id: str | None = None
@@ -50,6 +50,8 @@ class ActionResult:
     authority_outcome: str | None = None
     reason_codes: tuple[str, ...] = ()
     escalation_expires_at: str | None = None
+    escalation_status: str | None = None
+    escalation_mode: str | None = None
     dossier_evidence: dict[str, Any] | None = None
     execution_event: dict[str, Any] | None = None
     audit_recorded: bool | None = None

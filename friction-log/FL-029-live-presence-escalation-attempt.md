@@ -12,3 +12,5 @@
 - **Resolution:** Pending a successful child evaluation and a real Presence ceremony.
 - **Upstream/documentation gap:** The current client response does not surface the underlying Decionis request error needed to distinguish policy, identity, Presence, and transient service failures.
 - **Status:** Open; a fresh request is required once the authority error is diagnosed.
+
+**2026-10-07 diagnosis:** The official SDK's guarded request returned HTTP 503 with `PRESENCE_TENANT_CONNECTION_NOT_CONFIGURED`. The generic failure comes from the missing Decionis-to-Presence tenant connection. HomeBound's web approval lifecycle is now implemented and tested with labelled fixtures; the real ceremony remains pending this external setup. See [FL-032](FL-032-presence-tenant-connection-and-web-escalation.md).

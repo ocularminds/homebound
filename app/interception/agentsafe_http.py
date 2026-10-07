@@ -7,8 +7,10 @@ import logging
 import sqlite3
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
+from datetime import datetime
 from typing import Any
 from urllib.parse import urlsplit
+from weakref import WeakValueDictionary
 
 import httpx2
 
@@ -63,6 +65,7 @@ class AgentSafeActionPort(ActionRequestPort):
         self._sender = sender
         self._transport_factory = transport_factory
         self._timeout_seconds = timeout_seconds
+        self._resume_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
 
     async def request(self, proposal: ActionProposal) -> ActionResult:
         """Ask AgentSafe to capture, govern and, only on authority, dispatch."""
@@ -89,7 +92,9 @@ class AgentSafeActionPort(ActionRequestPort):
         }
         status, body = await self._post("/v1/actions", payload)
         if not 200 <= status < 300:
-            return self._http_refusal(status, body, proposal.correlation_id)
+            return await self._finish(
+                proposal, self._http_refusal(status, body, proposal.correlation_id)
+            )
 
         result = self._map_response(body, proposal.correlation_id)
         if result.decision == "ESCALATE":
@@ -129,6 +134,13 @@ class AgentSafeActionPort(ActionRequestPort):
     async def resume(self, correlation_id: str) -> ActionResult:
         """Present the saved handoff unchanged; AgentSafe rechecks the intent."""
 
+        # The web listener and a manual MCP client can check the same handoff.
+        # Serialize those checks so an older response cannot overwrite a new one.
+        lock = self._resume_locks.setdefault(correlation_id, asyncio.Lock())
+        async with lock:
+            return await self._resume_saved(correlation_id)
+
+    async def _resume_saved(self, correlation_id: str) -> ActionResult:
         pending = await asyncio.to_thread(self._pending.get, correlation_id)
         if pending is None:
             return self._unavailable(
@@ -137,6 +149,7 @@ class AgentSafeActionPort(ActionRequestPort):
                 "ESCALATION_NOT_FOUND",
             )
         status, body = await self._post("/v1/escalations", pending.handoff)
+        proposal = _proposal_from_dict(pending.proposal)
         if status == 409 and body.get("code") == "INTENT_EXPIRED":
             await asyncio.to_thread(self._pending.close, correlation_id, "EXPIRED")
             result = ActionResult(
@@ -147,27 +160,37 @@ class AgentSafeActionPort(ActionRequestPort):
                 authority_outcome="INTENT_EXPIRED",
                 reason_codes=("INTENT_EXPIRED",),
             )
-            return await self._finish(_proposal_from_dict(pending.proposal), result)
+            return await self._finish(proposal, _with_handoff(result, pending.handoff))
         if not 200 <= status < 300:
-            return self._http_refusal(status, body, correlation_id)
+            return await self._finish(
+                proposal,
+                _with_handoff(self._http_refusal(status, body, correlation_id), pending.handoff),
+            )
 
-        result = self._map_response(body, correlation_id)
+        result = _with_handoff(self._map_response(body, correlation_id), pending.handoff)
         if result.decision == "ESCALATE":
             next_handoff = body.get("escalation")
             if not isinstance(next_handoff, dict):
-                await asyncio.to_thread(self._pending.close, correlation_id, "UNAVAILABLE")
-                return self._unavailable(
-                    correlation_id,
-                    "AgentSafe returned a pending decision without the updated handoff.",
-                    "ESCALATION_HANDOFF_MISSING",
+                return await self._finish(
+                    proposal,
+                    _with_handoff(
+                        self._unavailable(
+                            correlation_id,
+                            "AgentSafe returned a pending decision without the updated handoff.",
+                            "ESCALATION_HANDOFF_MISSING",
+                        ),
+                        pending.handoff,
+                    ),
                 )
             await asyncio.to_thread(
                 self._pending.update_handoff, correlation_id, next_handoff
             )
-        else:
+        elif result.decision in {"ALLOW", "BLOCK"}:
             terminal = "RESOLVED" if result.decision == "ALLOW" else "DENIED"
             await asyncio.to_thread(self._pending.close, correlation_id, terminal)
-        return await self._finish(_proposal_from_dict(pending.proposal), result)
+        # An authority outage is not a denial. Retain the original handoff so
+        # the same intent can be checked after the connection is healthy.
+        return await self._finish(proposal, result)
 
     async def _finish(self, proposal: ActionProposal, result: ActionResult) -> ActionResult:
         """Archive proof for any returned dossier and append its local action record."""
@@ -242,11 +265,11 @@ class AgentSafeActionPort(ActionRequestPort):
         cls, status: int, body: dict[str, Any], correlation_id: str
     ) -> ActionResult:
         code = body.get("code")
-        if status == 409 and code in {"INTENT_EXPIRED", "ESCALATION_NOT_CONFIGURED"}:
+        if status == 409 and code == "INTENT_EXPIRED":
             return ActionResult(
                 decision="BLOCK",
                 execution="NOT_PERFORMED",
-                message="AgentSafe refused the expired or unconfigured escalation. No action ran.",
+                message="AgentSafe refused the expired escalation. No action ran.",
                 correlation_id=correlation_id,
                 authority_outcome=str(code),
                 reason_codes=(str(code),),
@@ -261,11 +284,18 @@ class AgentSafeActionPort(ActionRequestPort):
             and code.replace("_", "").isalnum()
         ):
             safe_code = f"_{code}"
-        return cls._unavailable(
+        result = cls._unavailable(
             correlation_id,
             "AgentSafe or Decionis did not return an enforceable decision. No Ring action ran.",
             f"AGENTSAFE_HTTP_{status}{safe_code}",
         )
+        if code == "AGENTSAFE_UNREACHABLE":
+            return replace(
+                result,
+                execution="UNKNOWN",
+                message="The executor response was lost. Check the action record before trying again.",
+            )
+        return result
 
     @staticmethod
     def _map_response(body: dict[str, Any], correlation_id: str) -> ActionResult:
@@ -280,7 +310,6 @@ class AgentSafeActionPort(ActionRequestPort):
         authorization = body.get("authorization")
         authorization = authorization if isinstance(authorization, dict) else {}
         escalation = body.get("escalation")
-        escalation_id, expires_at = _escalation_fields(escalation)
         common = {
             "correlation_id": correlation_id,
             "decision_id": decision_id,
@@ -291,8 +320,7 @@ class AgentSafeActionPort(ActionRequestPort):
             "intent_hash": _optional_string(body.get("intent_hash")),
             "authority_outcome": _optional_string(outcome),
             "reason_codes": reason_codes,
-            "escalation_id": escalation_id,
-            "escalation_expires_at": expires_at,
+            **_escalation_fields(escalation),
             "execution_event": _optional_dict(body.get("result")),
         }
 
@@ -323,14 +351,17 @@ class AgentSafeActionPort(ActionRequestPort):
             )
         if verdict == "ALLOW":
             executed = body.get("executed") is True and outcome == "COMPLETED"
+            unknown = outcome == "UNKNOWN_AFTER_DISPATCH"
             message = (
-                "AgentSafe executed the authorized action."
+                "The executor could not confirm the device result. Do not repeat the action."
+                if unknown
+                else "AgentSafe executed the authorized action."
                 if executed
                 else "Decionis allowed the action, but AgentSafe did not complete execution."
             )
             return ActionResult(
                 decision="ALLOW",
-                execution="PERFORMED" if executed else "NOT_PERFORMED",
+                execution="UNKNOWN" if unknown else "PERFORMED" if executed else "NOT_PERFORMED",
                 message=message,
                 **common,
             )
@@ -381,13 +412,49 @@ def _proposal_from_dict(value: dict[str, Any]) -> ActionProposal:
     )
 
 
-def _escalation_fields(value: Any) -> tuple[str | None, str | None]:
+def _escalation_fields(value: Any) -> dict[str, str | None]:
     if not isinstance(value, dict):
-        return None, None
+        return {}
     managed = value.get("escalation")
     if isinstance(managed, dict):
-        return (
-            _optional_string(managed.get("escalationId")),
-            _optional_string(managed.get("expiresAt")),
-        )
-    return _optional_string(value.get("request_id")), _optional_string(value.get("expires_at"))
+        intent = value.get("intent") if isinstance(value.get("intent"), dict) else {}
+        expires = [managed.get("expiresAt"), intent.get("expiresAt")]
+        valid = []
+        for date in expires:
+            try:
+                parsed = datetime.fromisoformat(date.replace("Z", "+00:00"))
+                if parsed.tzinfo is not None:
+                    valid.append((parsed.timestamp(), date))
+            except (ValueError, TypeError, AttributeError):
+                pass
+        return {
+            "escalation_id": _optional_string(managed.get("escalationId")),
+            "escalation_expires_at": min(valid)[1] if valid else None,
+            "escalation_status": _optional_string(managed.get("status")),
+            "escalation_mode": "MANAGED" if value.get("mode") == "MANAGED" else None,
+        }
+    return {
+        "escalation_id": _optional_string(value.get("request_id")),
+        "escalation_expires_at": _optional_string(value.get("expires_at")),
+        "escalation_mode": "DIRECT" if value.get("mode") == "DIRECT" else None,
+    }
+
+
+def _with_handoff(result: ActionResult, handoff: dict[str, Any]) -> ActionResult:
+    fields = {
+        key: value for key, value in _escalation_fields(handoff).items()
+        if getattr(result, key) is None
+    }
+    terminal_status = next(
+        (code for code in result.reason_codes if code in {"EXPIRED", "REJECTED", "CANCELLED", "BLOCKED"}),
+        None,
+    )
+    if "INTENT_EXPIRED" in result.reason_codes:
+        terminal_status = "EXPIRED"
+    if terminal_status:
+        fields["escalation_status"] = terminal_status
+    elif result.decision == "ALLOW":
+        fields["escalation_status"] = "GRANT_READY"
+    elif result.decision == "BLOCK":
+        fields["escalation_status"] = "BLOCKED"
+    return replace(result, **fields)

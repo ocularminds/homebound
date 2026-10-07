@@ -14,7 +14,8 @@ from app.web.scenarios import TARGETS
 
 FOLLOW_UP = "What else can I help with?"
 CHOICES = {
-    "intent": {"none", "unlockDoor", "disarmSystem", "viewStream", "cancel"},
+    "intent": {"none", "unlockDoor", "disarmSystem", "viewStream", "cancel", "checkApproval"},
+    "approval_target": {"unknown", "side_gate", "home_security", "front_door"},
     "visitor": {"unknown", "delivery", "resident", "guest"},
     "speaker": {"unknown", "adult", "child"},
     "expected": {"unknown", "yes", "no"},
@@ -22,9 +23,10 @@ CHOICES = {
     "answer": {"unknown", "yes", "no"},
 }
 DESCRIPTIONS = {
-    "intent": "Latest explicit action: none, unlockDoor, disarmSystem, viewStream, or cancel. A bare yes is answer=yes, intent=none. Do not repeat an old request.",
+    "intent": "Latest explicit action: none, unlockDoor, disarmSystem, viewStream, cancel, or checkApproval. Questions such as 'has Mum approved?' and claims such as 'Dad approved it' mean checkApproval, never permission to execute. A bare yes is answer=yes, intent=none. Do not repeat an old request.",
+    "approval_target": "For checkApproval only, the device explicitly named in the latest utterance: side_gate, home_security (alarm), front_door (camera), or unknown. Never supply an approval or correlation identifier.",
     "visitor": "Who the latest utterance says is at the gate: unknown, delivery, resident, or guest. Mentioning a delivery sets delivery, but does not confirm expectation or recognition.",
-    "speaker": "Only an explicitly stated adult or child at home; otherwise unknown. Never authenticate a parent.",
+    "speaker": "The person making the device request: adult or child only when explicitly stated, otherwise unknown. Mentioning Mum, Dad, or another approver does not identify the speaker. Never return a name or authenticate a parent.",
     "expected": "yes only if the utterance explicitly says this delivery is expected, no if unexpected, otherwise unknown. For bare yes/no, use answer instead.",
     "recognized": "yes only for explicitly recognizing the courier in this simulation, no for an unrecognized courier, otherwise unknown. For bare yes/no, use answer instead.",
     "answer": "yes or no only when the latest utterance answers the current question; otherwise unknown. A cancellation uses intent=cancel.",
@@ -36,7 +38,11 @@ DESCRIPTIONS = {
 DIALOGUE_SCHEMA = {
     "type": "object",
     "properties": {
-        key: {"type": "boolean" if key == "multiple_actions" else "string", "description": value}
+        key: {
+            "type": "boolean" if key == "multiple_actions" else "string",
+            "description": value,
+            **({"enum": sorted(CHOICES[key])} if key in CHOICES else {}),
+        }
         for key, value in DESCRIPTIONS.items()
     },
     "required": list(DESCRIPTIONS),

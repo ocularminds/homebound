@@ -17,6 +17,7 @@ from test_web import action_result, application, client
 def facts(**updates: Any) -> dict[str, Any]:
     return {
         "intent": "none",
+        "approval_target": "unknown",
         "visitor": "unknown",
         "speaker": "unknown",
         "expected": "unknown",

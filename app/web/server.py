@@ -19,6 +19,7 @@ from starlette.staticfiles import StaticFiles
 from app.config.settings import Settings
 from app.web.assistant import Conversation, WebAssistant, WebError
 from app.web.conversation import DialogueContext, home_greeting
+from app.web.escalations import approval_snapshot
 from app.web.scenarios import SCENARIOS, public_scenarios
 from app.web.settings import WebSettings
 from app.web.voice import DeepgramVoice, MAX_AUDIO_BYTES, VoiceError
@@ -199,6 +200,7 @@ def create_asgi_app(
                 "activity": session.activity,
                 "device_state": session.device_state,
                 "pending": list(session.pending),
+                "approvals": approval_snapshot(session.pending),
                 "busy": session.lock.locked(),
             }
         )
@@ -215,12 +217,15 @@ def create_asgi_app(
         return JSONResponse(await assistant.chat(session, identifier, message.strip(), scenario_id))
 
     async def resume(request: Request, session: Conversation) -> Response:
-        body = await json_body(request, {"request_id", "correlation_id"})
+        body = await json_body(request, {"request_id", "correlation_id", "automatic"})
         identifier = request_id(body)
         correlation = body.get("correlation_id")
         if not isinstance(correlation, str) or not 1 <= len(correlation) <= 256:
             raise WebError("CORRELATION_INVALID", "Choose a pending request to check.")
-        return JSONResponse(await assistant.resume(session, identifier, correlation))
+        automatic = body.get("automatic", False)
+        if type(automatic) is not bool:
+            raise WebError("INVALID_REQUEST", "Automatic must be a boolean.")
+        return JSONResponse(await assistant.resume(session, identifier, correlation, automatic=automatic))
 
     async def clear(_request: Request, session: Conversation) -> Response:
         if session.lock.locked():
