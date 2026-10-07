@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager, suppress
 import json
 import logging
 import secrets
@@ -17,6 +19,10 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from app.config.settings import Settings
+from app.ambient.engine import CanvasEngine, CanvasService
+from app.ambient.models import CanvasError
+from app.ambient.safety import OverlaySafety
+from app.ambient.store import CanvasStore
 from app.web.assistant import Conversation, WebAssistant, WebError
 from app.web.conversation import DialogueContext, home_greeting
 from app.web.escalations import approval_snapshot
@@ -151,6 +157,11 @@ def create_asgi_app(
         raise ValueError("The Alexa web simulator is a local development interface.")
     sessions = Conversations()
     voice = voice or DeepgramVoice(web_settings)
+    if assistant.canvas is None:
+        assistant.canvas = CanvasService(
+            CanvasEngine(CanvasStore(":memory:", time.time()), OverlaySafety())
+        )
+    canvas = assistant.canvas
 
     def api(
         handler: Callable[[Request, Conversation], Awaitable[Response]],
@@ -160,7 +171,7 @@ def create_asgi_app(
             try:
                 key, session = sessions.get(request.cookies.get(SESSION_COOKIE))
                 response = await handler(request, session)
-            except (WebError, VoiceError) as error:
+            except (WebError, VoiceError, CanvasError) as error:
                 response = JSONResponse(
                     {"error": error.code, "message": error.message}, status_code=error.status
                 )
@@ -212,7 +223,7 @@ def create_asgi_app(
         scenario_id = body.get("scenario_id", "conversation")
         if not isinstance(message, str) or not 1 <= len(message.strip()) <= 2000:
             raise WebError("MESSAGE_INVALID", "Use a request between 1 and 2,000 characters.")
-        if not isinstance(scenario_id, str) or scenario_id not in {*SCENARIOS, "conversation"}:
+        if not isinstance(scenario_id, str) or scenario_id not in {*SCENARIOS, "conversation", "canvas"}:
             raise WebError("SCENARIO_INVALID", "Select one of the available demo scenes.")
         return JSONResponse(await assistant.chat(session, identifier, message.strip(), scenario_id))
 
@@ -261,14 +272,64 @@ def create_asgi_app(
     async def index(_request: Request) -> Response:
         return FileResponse(STATIC_DIRECTORY / "index.html")
 
+    async def television(_request: Request) -> Response:
+        return FileResponse(STATIC_DIRECTORY / "tv.html")
+
+    async def canvas_state(_request: Request, _session: Conversation) -> Response:
+        return JSONResponse({
+            **await canvas.engine.snapshot(),
+            "voice_configured": web_settings.voice_configured,
+            "home_timezone": web_settings.home_timezone,
+        })
+
+    async def canvas_simulate(request: Request, _session: Conversation) -> Response:
+        body = await json_body(request, {"request_id", "kind", "value"})
+        await canvas.engine.simulate(request_id(body), body.get("kind"), body.get("value"))
+        return JSONResponse(await canvas.engine.snapshot())
+
+    async def canvas_action(request: Request, _session: Conversation) -> Response:
+        body = await json_body(request, {"request_id", "intent", "product"})
+        intent, product = body.get("intent"), body.get("product", "unknown")
+        if not isinstance(intent, str) or not isinstance(product, str):
+            raise CanvasError("INVALID_ACTION", "Choose an available canvas action.")
+        reply = await canvas.action(request_id(body), intent, product)
+        return JSONResponse({"reply": reply, "canvas": await canvas.engine.snapshot()})
+
+    async def canvas_dismiss(request: Request, _session: Conversation) -> Response:
+        body = await json_body(request, {"note_id"})
+        if not isinstance(body.get("note_id"), str) or len(body["note_id"]) > 64:
+            raise CanvasError("INVALID_NOTE", "Choose a visible note.")
+        await canvas.engine.dismiss_note(body["note_id"])
+        return JSONResponse(await canvas.engine.snapshot())
+
     async def health(_request: Request) -> Response:
         return JSONResponse({"status": "ok", "service": "homebound-web"})
 
+    @asynccontextmanager
+    async def lifespan(_application: Starlette):
+        consumer = (
+            asyncio.create_task(canvas.consumer.run(canvas.engine)) if canvas.consumer else None
+        )
+        try:
+            yield
+        finally:
+            if consumer:
+                consumer.cancel()
+                with suppress(asyncio.CancelledError):
+                    await consumer
+            canvas.engine.store.close()
+
     application = Starlette(
+        lifespan=lifespan,
         routes=[
             Route("/", index),
+            Route("/tv", television),
             Route("/healthz", health),
             Route("/api/bootstrap", api(bootstrap)),
+            Route("/api/canvas", api(canvas_state)),
+            Route("/api/canvas/simulate", api(canvas_simulate), methods=["POST"]),
+            Route("/api/canvas/action", api(canvas_action), methods=["POST"]),
+            Route("/api/canvas/dismiss", api(canvas_dismiss), methods=["POST"]),
             Route("/api/chat", api(chat), methods=["POST"]),
             Route("/api/resume", api(resume), methods=["POST"]),
             Route("/api/clear", api(clear), methods=["POST"]),

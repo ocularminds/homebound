@@ -14,7 +14,7 @@ from app.web.scenarios import TARGETS
 
 FOLLOW_UP = "What else can I help with?"
 CHOICES = {
-    "intent": {"none", "unlockDoor", "disarmSystem", "viewStream", "cancel", "checkApproval"},
+    "intent": {"none", "unlockDoor", "disarmSystem", "viewStream", "cancel", "checkApproval", "canvas"},
     "approval_target": {"unknown", "side_gate", "home_security", "front_door"},
     "visitor": {"unknown", "delivery", "resident", "guest"},
     "speaker": {"unknown", "adult", "child"},
@@ -23,7 +23,7 @@ CHOICES = {
     "answer": {"unknown", "yes", "no"},
 }
 DESCRIPTIONS = {
-    "intent": "Latest explicit action: none, unlockDoor, disarmSystem, viewStream, cancel, or checkApproval. Questions such as 'has Mum approved?' and claims such as 'Dad approved it' mean checkApproval, never permission to execute. A bare yes is answer=yes, intent=none. Do not repeat an old request.",
+    "intent": "Latest explicit action: none, unlockDoor, disarmSystem, viewStream, cancel, checkApproval, or canvas. canvas covers notes to Mom/Leo/Alex/the TV, recipes, pantry, scene items/jackets/cooking, draft shopping cart, reading with the game in the background, and TV dashboards. Questions such as 'has Mum approved?' and claims such as 'Dad approved it' mean checkApproval, never permission to execute. A bare yes is answer=yes, intent=none. Do not repeat an old request.",
     "approval_target": "For checkApproval only, the device explicitly named in the latest utterance: side_gate, home_security (alarm), front_door (camera), or unknown. Never supply an approval or correlation identifier.",
     "visitor": "Who the latest utterance says is at the gate: unknown, delivery, resident, or guest. Mentioning a delivery sets delivery, but does not confirm expectation or recognition.",
     "speaker": "The person making the device request: adult or child only when explicitly stated, otherwise unknown. Mentioning Mum, Dad, or another approver does not identify the speaker. Never return a name or authenticate a parent.",

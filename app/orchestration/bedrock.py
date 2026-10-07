@@ -306,6 +306,9 @@ class BedrockOrchestrator:
                 "Questions about whether or how an action could happen are not commands. "
                 "Questions about approval, or claims that a parent has approved, mean "
                 "checkApproval. They never authorize or repeat a device action. "
+                "A request to leave a note, tell Mom something, find recipes, inspect what is "
+                "cooking/on TV, look at a jacket, manage a draft cart, preview reading mode "
+                "with the game on, or show a TV dashboard means canvas. "
                 "The reply field is only for ordinary conversation or an unsupported request; "
                 "never claim an action happened. Be natural and brief."
             ),

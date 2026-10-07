@@ -1,0 +1,81 @@
+# HomeBound-specific checks complement the pinned AWS registry rules.
+# These are template checks, not proof of live IAM or deployment readiness.
+let canvas_logs = Resources.*[ Type == 'AWS::Logs::LogGroup' ]
+let canvas_queues = Resources.*[ Type == 'AWS::SQS::Queue' ]
+let canvas_runtimes = Resources.*[ Type == 'AWS::BedrockAgentCore::Runtime' ]
+let canvas_buses = Resources.*[ Type == 'AWS::EventsV2::EventBus' ]
+let canvas_roles = Resources.*[ Type == 'AWS::IAM::Role' ]
+
+rule CANVAS_LOGS_ENCRYPTED_AND_BOUNDED {
+    %canvas_logs !empty
+    %canvas_logs {
+        DeletionPolicy == 'Retain'
+        UpdateReplacePolicy == 'Retain'
+        Properties.KmsKeyId exists
+        Properties.RetentionInDays <= 30
+    }
+}
+
+rule CANVAS_QUEUES_ENCRYPTED_AND_RETAINED {
+    %canvas_queues !empty
+    %canvas_queues {
+        DeletionPolicy == 'Retain'
+        UpdateReplacePolicy == 'Retain'
+        Properties.KmsMasterKeyId exists
+        Properties.MessageRetentionPeriod <= 1209600
+    }
+}
+
+rule CANVAS_RUNTIME_PRIVATE_WITH_IAM {
+    %canvas_runtimes !empty
+    %canvas_runtimes {
+        Properties.NetworkConfiguration.NetworkMode == 'VPC'
+        Properties.AuthorizerConfiguration not exists
+    }
+}
+
+rule CANVAS_SCREENING_USES_PUBLISHED_VERSION {
+    Resources.PublishedGuardrail.Type == 'AWS::Bedrock::GuardrailVersion'
+    %canvas_runtimes.Properties.EnvironmentVariables.HOMEBOUND_CANVAS_GUARDRAIL_VERSION in [
+        {'Fn::GetAtt': ['PublishedGuardrail', 'Version']},
+        {'Fn::GetAtt': 'PublishedGuardrail.Version'}
+    ]
+}
+
+rule CANVAS_EVENT_BUS_ENCRYPTED_AND_BOUNDED {
+    %canvas_buses !empty
+    %canvas_buses.Properties.EncryptionConfiguration.KmsKeyIdentifier exists
+    %canvas_buses.Properties.StorageConfiguration.RetentionPeriodInDays == 1
+}
+
+rule CANVAS_TRANSPORT_PRESERVES_ORDER {
+    Resources.InputQueue.Properties.FifoQueue == true
+    Resources.OutputQueue.Properties.FifoQueue == true
+    Resources.SupervisorSubscriber.Properties.Type == 'FIFO'
+    Resources.SupervisorSubscriber.Properties.Transformer.Type == 'RAW'
+    Resources.InputQueue.Properties.RedrivePolicy exists
+    Resources.OutputQueue.Properties.RedrivePolicy exists
+}
+
+rule CANVAS_CONSUMER_REQUIRES_EXPLICIT_ENABLE {
+    Parameters.EnableConsumer.Default == 'false'
+    Resources.WorkerSubscription.Properties.Enabled == {
+        'Fn::If': ['ConsumerEnabled', true, false]
+    }
+}
+
+rule CANVAS_ROLE_PERMISSIONS_HAVE_NO_WILDCARD_ACTIONS {
+    let broad_roles = %canvas_roles[
+        some Properties.Policies[*].PolicyDocument.Statement[*] {
+            Effect == 'Allow'
+            some Action[*] in ['*', /^[a-zA-Z0-9-]+:\*$/]
+        }
+    ]
+    %broad_roles empty
+}
+
+rule CANVAS_WORKER_ARTIFACT_IS_VERSIONED {
+    Resources.Worker.Properties.Code.S3ObjectVersion exists
+    Resources.Worker.Properties.ReservedConcurrentExecutions <= 2
+    Resources.WorkerSubscription.Properties.FunctionResponseTypes == ['ReportBatchItemFailures']
+}

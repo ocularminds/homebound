@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" fill="none">
+<defs>
+<linearGradient id="sky" x2="0" y2="1080" gradientUnits="userSpaceOnUse"><stop stop-color="#122c40"/><stop offset=".45" stop-color="#6b969d"/><stop offset=".64" stop-color="#c9b8a1"/><stop offset="1" stop-color="#19383e"/></linearGradient>
+<linearGradient id="sea" x2="0" y1="480" y2="1080" gradientUnits="userSpaceOnUse"><stop stop-color="#8fa6a2"/><stop offset=".3" stop-color="#467780"/><stop offset="1" stop-color="#112e38"/></linearGradient>
+<linearGradient id="cliff" x1="1900" y1="230" x2="870" y2="900" gradientUnits="userSpaceOnUse"><stop stop-color="#182e30"/><stop offset=".5" stop-color="#2c4540"/><stop offset="1" stop-color="#0d2328"/></linearGradient>
+<radialGradient id="glow"><stop stop-color="#e6c7a0" stop-opacity=".45"/><stop offset="1" stop-color="#d1b09c" stop-opacity="0"/></radialGradient>
+<filter id="mist"><feGaussianBlur stdDeviation="24"/></filter>
+<filter id="texture"><feTurbulence type="fractalNoise" baseFrequency=".7" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope=".08"/></feComponentTransfer><feBlend in="SourceGraphic" mode="soft-light"/></filter>
+</defs>
+<path fill="url(#sky)" d="M0 0h1920v1080H0z"/>
+<ellipse cx="940" cy="480" rx="700" ry="420" fill="url(#glow)"/>
+<circle cx="1130" cy="223" r="39" fill="#f5e6cf" opacity=".7"/><circle cx="1145" cy="211" r="39" fill="#476773"/>
+<path d="m0 422 170-43 154 62 78-33 120 59 148-24 202 60 143-6 180 44H0Z" fill="#385763" opacity=".44"/>
+<path d="m0 495 144-40 77 30 232 33 109-14 230 50 279-35 256 49H0Z" fill="#567983" opacity=".6"/>
+<path fill="url(#sea)" d="M0 548h1920v532H0z"/>
+<path d="m0 561 410 8 520-7 380 12" stroke="#d8d2b8" opacity=".38"/>
+<g stroke="#c0cbc0" opacity=".15"><path d="m95 631 490 6m-183 48 587-6M47 762l570-7m-389 78 538 14m-699 63 601-9m404-286 280-3m-423 135 436 17m-481 134 467 24m-1083 93 631 9"/></g>
+<path d="m1013 600 160-59 103-9 63-75 110-58 98-72 72 9 113-76 74 32 114-74v862H974l-81-107 122-72-155-81 161-103-64-64Z" fill="url(#cliff)"/>
+<path d="m1515 345 36 77-144 123 51 78-158 34 40 86-276 84 235-124-19-96 129-47-23-56 113-105Z" fill="#7a8070" opacity=".27"/>
+<path d="m1827 315-112 200 53 83-154 77 33 92-176 70 109-119-28-80 129-67-28-80Z" fill="#a0a081" opacity=".11"/>
+<path d="m1006 683 157-84 99-15m-362 234 171-63 174-26m-345 184 235-83" stroke="#bbc2ae" stroke-width="3" opacity=".3"/>
+<path d="M521 532c360-33 629-6 778 51" stroke="#c1c5af" stroke-width="38" opacity=".13" filter="url(#mist)"/>
+<path d="m0 1000 208-68 74 13 75-77 74 23 93 61 90 128H0Z" fill="#0a2127"/>
+<path d="m0 1033 91-19 91 27 85-23 133 62H0Z" fill="#0a1b21"/>
+<path d="M0 0h1920v1080H0z" fill="#777" opacity=".24" filter="url(#texture)" style="mix-blend-mode:soft-light"/>
+</svg>

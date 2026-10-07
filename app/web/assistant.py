@@ -16,6 +16,7 @@ from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 
 from app.config.settings import Settings
+from app.ambient.engine import CanvasService
 from app.orchestration.bedrock import BedrockOrchestrator
 from app.web.conversation import (
     DIALOGUE_SCHEMA,
@@ -192,12 +193,14 @@ class WebAssistant:
         web_settings: WebSettings,
         agent_factory: Callable[[], BedrockOrchestrator],
         resume_call: Callable[[str], Awaitable[dict[str, Any]]] | None = None,
+        canvas: CanvasService | None = None,
     ) -> None:
         self.settings, self.web_settings = settings, web_settings
         self._agent_factory = agent_factory
         self._agent: BedrockOrchestrator | None = None
         self._agent_lock = asyncio.Lock()
         self._resume_call = resume_call or self._resume_mcp
+        self.canvas = canvas
 
     async def _get_agent(self) -> BedrockOrchestrator:
         if not self.settings.bedrock_model_id:
@@ -234,6 +237,8 @@ class WebAssistant:
         if cached is not None:
             return cached
         async with session.lock:
+            if scenario_id == "canvas":
+                return await self._converse_canvas(session, request_id, fingerprint, message)
             if scenario_id == "conversation" and message.lower().strip(" .?!") in {
                 "check approval", "alexa, check approval", "alexa check approval",
                 "check the approval", "check approval status",
@@ -315,6 +320,8 @@ class WebAssistant:
             facts["reply"] = BedrockOrchestrator._message_text(
                 {"content": [{"text": facts["reply"]}]}
             )
+            if facts["intent"] == "canvas":
+                return await self._converse_canvas(session, request_id, fingerprint, message)
             if facts["intent"] == "checkApproval":
                 return await self._check_from_conversation(
                     session, request_id, fingerprint, message, facts["approval_target"]
@@ -394,6 +401,19 @@ class WebAssistant:
             answer,
             warning,
             captured_signals=context,
+        )
+
+    async def _converse_canvas(
+        self, session: Conversation, request_id: str, fingerprint: str, message: str,
+    ) -> dict[str, Any]:
+        if self.canvas is None:
+            raise WebError("CANVAS_UNAVAILABLE", "The TV canvas is not configured.", 503)
+        # Switching topics must not leave a bare yes able to submit an old device action.
+        # Saved authority handoffs remain intact and can still be checked explicitly.
+        session.dialogue.consume_action()
+        answer = await self.canvas.converse(request_id, message)
+        return self._finish(
+            session, request_id, fingerprint, message, "conversation", [], answer, None,
         )
 
     async def _check_from_conversation(
