@@ -2,7 +2,7 @@
 
 HomeBound turns a living-room screen into a context-sensitive companion: the right note for the person present, a recipe that accounts for the pantry, or a quiet view of home during a break. The implementation lives at `/tv`, alongside the Alexa-style voice screen at `/`.
 
-This is a browser prototype with original illustrated scenes. Bedrock interpretation and the configured Deepgram speech service are real. Ring/Alexa+ sensors, physical FireTV playback, camera video, weather, commercial detection, product offers, and Amazon Pay are not connected. The AWS supervisor and transports are implemented and tested with service fixtures, with infrastructure supplied for a separate deployment.
+This is a browser prototype with original illustrated scenes and a Runway-generated 3D cartoon. Bedrock interpretation and the configured Deepgram speech service are real. Ring/Alexa+ sensors, physical FireTV playback, camera video, weather, commercial detection, product offers, and Amazon Pay are not connected. The AWS supervisor and transports are implemented and tested with service fixtures, with infrastructure supplied for a separate deployment.
 
 ## Try the experience
 
@@ -37,7 +37,7 @@ The surface supports directional-key focus navigation, visible focus indicators,
 
 ## Video and notes during commercials
 
-The video player uses separate program and commercial elements. For the planned
+The video player uses separate program and commercial elements. For the included
 one-minute cartoon, it pauses the program at 20 and 42 seconds, plays a six-second
 house promo, and returns to the actual paused position. These are explicit ad
 cues for an owned local video, not automatic detection inside another streaming
@@ -50,22 +50,39 @@ guest and freshness checks still apply. A late callback from an older playback
 session cannot start a break or restore its old program after the viewer has
 selected something else. Hidden tabs suspend playback.
 
-**Production status:** the requested rabbit-and-bulldog cartoon is awaiting the
-user's Runway connection and has not been generated. Its
-[storyboard](../media/park-chase/brief.md) and
-[generation prompts](../media/park-chase/runway-prompts.md) are prepared. The
-selector says “Film being prepared” until all five exports exist and are
-nonempty under `app/web/static/media/`: `park-chase.mp4`,
-`park-chase-poster.jpg`, `park-chase.vtt`, `movie-night-ad.mp4`, and
-`popcorn-ad.mp4`. The target is a 60-second H.264/AAC program and two six-second
-H.264/AAC promos, with a poster and English captions. Review the actual Runway
-outputs and verify their duration, codecs and sound before publishing them.
+**Production status:** *A little hare-raising afternoon* is complete. Runway
+generated the original character references, nine selected animation shots,
+music, sound effects, and two house promos. The final edit includes the park,
+train, windy chase, living-room stop, jumping children, and rabbit's last look.
+See the [story and edit](../media/park-chase/brief.md),
+[creative prompts](../media/park-chase/runway-prompts.md), and
+[production manifest](../media/park-chase/production.json) for source task IDs,
+submitted prompts, timing, and export checksums.
 
-Once the exports are ready, select the short in **Demo signals**, or open
-`/tv?play=park_chase`. Files are served with HTTP byte-range support and are
+All five exports are included under `app/web/static/media/`: `park-chase.mp4`,
+`park-chase-poster.jpg`, `park-chase.vtt`, `movie-night-ad.mp4`, and
+`popcorn-ad.mp4`. The 60-second program and two six-second promos use 1280×720,
+24 fps H.264 video and stereo AAC audio. The soundtrack contains original music
+and comic effects, including the bulldog's tire-screech stop and panting.
+English sound captions and a poster accompany the program. The selector falls
+back to “Film being prepared” if any required export is missing or empty.
+
+Select **Leo** in **Demo signals**, then choose the cartoon to see his sample
+homework reminder during the commercials. You can also open
+[`/tv?play=park_chase`](http://127.0.0.1:8300/tv?play=park_chase).
+The complete viewing time is 72 seconds before any viewer pauses. Files are
+served with HTTP byte-range support and are
 included in the Python package. Video is streamed to this browser canvas;
 physical FireTV casting remains an integration task. Synthetic test clips are
 kept in the ignored test workspace and are never published as the cartoon.
+
+The completed exports pass a full video/audio decode: 1,440 program frames and
+144 frames per commercial. Audio peaks remain below clipping. Browser checks
+with the real media verified sound-enabled playback, notes at both 20- and
+42-second cues, pause-to-read, note removal after resumption, and playback to
+the end. The media endpoint returns HTTP 206 for byte-range requests.
+
+![Popcorn commercial with Leo's live sample reminder](assets/firetv-cartoon-commercial.png)
 
 ## What runs where
 
@@ -216,7 +233,7 @@ python scripts/fetch_canvas_guard_rules.py
 
 Local schema validation passes in both listed regions. Guard reports zero violations: seven applicable AWS rules and nine HomeBound rules pass; the Lambda public-permission rule is inapplicable because no such resource is created. Deliberately changing the runtime to public networking, permitting wildcard role actions, removing log encryption, or using `DRAFT` causes the custom checks to fail. These checks do not prove IAM effectiveness, live connectivity, model entitlement, or cloud deployment readiness. Service pre-deployment checks and a deployed end-to-end run remain separate work.
 
-The full Python suite passes 182 tests, and the existing voice/AgentSafe JavaScript suites pass 22. The Lambda zip was built and imported without access to the developer environment's site packages. Live local Bedrock requests exercised note creation, illustrated cooking/jacket interpretation, a contextual cart follow-up, and reading mode. A request through Alexa's normal dialogue route saved a note visible on the TV and returned Deepgram speech successfully. Browser checks covered guest redaction, media attention, pantry updates, restoration, remote focus, long-note containment, and 390/1440/1920-pixel layouts. The Docker daemon did not respond to its version probe, so the ARM64 container image build remains unverified; no container or cloud deployment was attempted.
+The canvas and player release passed 188 Python tests and 32 JavaScript tests. The completed-media update reran its six Python playback tests and ten JavaScript player tests successfully. The Lambda zip was built and imported without access to the developer environment's site packages. Live local Bedrock requests exercised note creation, illustrated cooking/jacket interpretation, a contextual cart follow-up, and reading mode. A request through Alexa's normal dialogue route saved a note visible on the TV and returned Deepgram speech successfully. Browser checks covered guest redaction, media attention, pantry updates, restoration, remote focus, long-note containment, and 390/1440/1920-pixel layouts. The Docker daemon did not respond to its version probe, so the ARM64 container image build remains unverified; no container or cloud deployment was attempted.
 
 ## Platform and API references
 
