@@ -1,7 +1,9 @@
 # Runway production prompts
 
-Status: prepared, not submitted. The user selected Runway for the final
-AI-generated animation. Start generation only after that connection is available.
+Status: produced on 2026-10-07 through the connected Runway account. These are
+the original creative directions. The final edit uses nine animation shots
+and two commercials; the [production manifest](production.json) preserves the
+actual submitted prompts, model IDs, selected task IDs, and final timing.
 
 ## Continuity reference
 
@@ -16,11 +18,10 @@ children wear a plum hoodie and a golden-yellow top. Use the same couple in the
 park and the living room. No existing cartoon characters, logos, watermarks or
 embedded words. The physical comedy is harmless and humorous.
 
-Build continuity references in Runway as needed, and use the resulting assets
-consistently. The target edit is 16:9, 60 seconds, with the following six
-ten-second sequences. Adapt the generation calls to the connected tool's actual
-supported duration and reference inputs; do not change the story to fit a guessed
-API. Keep the final mocking look intact.
+The following six story sequences guided the 16:9, 60-second production.
+Character and scene references supplied continuity. Generation used supported
+five- and ten-second shots, splitting the train, fall, children, and rabbit
+reactions into readable beats. The final edit retains the rabbit's mocking look.
 
 ## 01 - An ordinary afternoon
 

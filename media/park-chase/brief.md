@@ -21,14 +21,14 @@ cheeky sideways look from beneath the table. Nobody is hurt.
 
 | Program time | Shot | Action and sound |
 | --- | --- | --- |
-| 00:00-00:08 | Park wide | Couple under the tree, children playing, soft music and birds. |
-| 00:08-00:14 | Station | Train settles at the platform; doors open and passengers descend. Train chime. |
-| 00:14-00:20 | Unexpected visitor | Rabbit wobbles, falls from a low branch and bounces safely; bulldog reacts. Slide whistle and boing. |
-| 00:20-00:28 | The chase | Rabbit hops away, bulldog gives chase. Pattering feet and jaunty music. |
-| 00:28-00:36 | A windy shortcut | Tracking camera, swirling leaves, flapping ears and elastic turns. Wind and whooshes. |
-| 00:36-00:42 | Movie night | Cozy living room, family watching TV and eating popcorn. Warm lighting. |
-| 00:42-00:49 | Uninvited guests | Rabbit darts under the dining table. Bulldog charges in and skids. Tire screech. |
-| 00:49-00:55 | Popcorn everywhere | Two children leap up, popcorn flies, dog pants and blinks. Comic musical sting. |
+| 00:00-00:10 | Park wide | Couple under the tree, children playing, soft music and birds. |
+| 00:10-00:15 | Station | Passengers step down from the local train onto the platform. |
+| 00:15-00:20 | Unexpected visitor | Rabbit falls from a low branch and bounces safely; bulldog reacts. Slide whistle and boing. |
+| 00:20-00:30 | The chase | Rabbit hops away, bulldog gives chase. Pattering feet and jaunty music. |
+| 00:30-00:35 | A windy shortcut | Swirling leaves and flapping ears as the animals reach the open doorway. Wind and whooshes. |
+| 00:35-00:45 | Movie night | Cozy living room, family watching TV and eating popcorn. Warm lighting and a slower pace. |
+| 00:45-00:50 | Uninvited guests | Bulldog charges in and skids beside the rabbit. Tire screech at 00:47.250. |
+| 00:50-00:55 | Popcorn everywhere | Two children leap up and popcorn flies. Surprised gasps and panting. |
 | 00:55-01:00 | Last laugh | Low camera under the table; rabbit peeks and smirks at the panting dog. Playful final cadence. |
 
 Two original six-second house promos interrupt playback at program times
@@ -51,15 +51,28 @@ material finish. Soft shadows, a mint-and-gold park, coral train, cream rabbit,
 cinnamon bulldog, amber lamps and teal living-room furniture. Camera cuts and
 tracking shots serve the action; this is animation, not a slideshow.
 
-Generate the final animation and sound through the user's connected Runway
-account. Preserve the same rabbit, bulldog and family across shots. No
+The animation and sound were generated through the user's connected Runway
+account, using character and scene references for continuity. No
 copyrighted characters, third-party films or ads, or real product claims. No
 dialogue is required; comic action and sound carry the story.
 
 ## Production and playback
 
-The user selected Runway for AI-generated animation. Generation requires the
-Runway connection; this brief is not a completed film. Keep source generation
-receipts and the final edit details beside this brief when assets are produced.
-Finished H.264/AAC MP4 files play through the browser's video element with HTTP
-byte-range support. The deployed web app does not require a rendering service.
+Completed on 2026-10-07. Runway Gen-4 Turbo supplied the animation, Nano Banana
+Pro supplied reference images, and Lyria 3 Pro supplied the original score.
+Runway also generated the six sound-effect layers. The
+[production manifest](production.json) records the selected source task IDs,
+submitted prompts, edit timing, audio cues, and SHA-256 checksums.
+
+The quiet family shot uses half-speed playback; the braking shot uses its clean
+first five seconds. Children and rabbit reactions have separate close shots.
+Each commercial holds its last frame for approximately one second, with exact
+HomeBound typography added during editing. Live notes remain separate from the
+video. Source selections were reviewed for character continuity and extra
+figures before export.
+
+The finished 60-second program and two six-second commercials are 1280×720,
+24 fps H.264/AAC MP4 files in `app/web/static/media/`, accompanied by a poster
+and English sound captions. They play through the browser's video element with
+HTTP byte-range support. The deployed web app does not require Runway access or
+a rendering service. Open [the cartoon on the FireTV canvas](http://127.0.0.1:8300/tv?play=park_chase).

@@ -1,0 +1,615 @@
+{
+  "schema_version": 1,
+  "title": "A little hare-raising afternoon",
+  "completed_on": "2026-10-07",
+  "provenance": "Original AI-generated animation, images, music, and sound effects produced through Runway; edited locally for HomeBound.",
+  "format": {
+    "width": 1280,
+    "height": 720,
+    "fps": 24,
+    "video_codec": "H.264 High / yuv420p",
+    "audio_codec": "AAC LC",
+    "audio_sample_rate": 48000,
+    "audio_channels": 2,
+    "fast_start": true
+  },
+  "program_edit": [
+    {
+      "source": "clip_01_park",
+      "program_in_seconds": 0,
+      "program_out_seconds": 10,
+      "source_in_seconds": 0,
+      "source_out_seconds": 10,
+      "playback_rate": 1.0
+    },
+    {
+      "source": "clip_02_train",
+      "program_in_seconds": 10,
+      "program_out_seconds": 15,
+      "source_in_seconds": 0,
+      "source_out_seconds": 5,
+      "playback_rate": 1.0
+    },
+    {
+      "source": "clip_03_fall",
+      "program_in_seconds": 15,
+      "program_out_seconds": 20,
+      "source_in_seconds": 0,
+      "source_out_seconds": 5,
+      "playback_rate": 1.0
+    },
+    {
+      "source": "clip_04_chase",
+      "program_in_seconds": 20,
+      "program_out_seconds": 30,
+      "source_in_seconds": 0,
+      "source_out_seconds": 10,
+      "playback_rate": 1.0
+    },
+    {
+      "source": "clip_05_shortcut",
+      "program_in_seconds": 30,
+      "program_out_seconds": 35,
+      "source_in_seconds": 0,
+      "source_out_seconds": 5,
+      "playback_rate": 1.0
+    },
+    {
+      "source": "clip_06_living_room_v2",
+      "program_in_seconds": 35,
+      "program_out_seconds": 45,
+      "source_in_seconds": 0,
+      "source_out_seconds": 5,
+      "playback_rate": 0.5
+    },
+    {
+      "source": "clip_07_brake",
+      "program_in_seconds": 45,
+      "program_out_seconds": 50,
+      "source_in_seconds": 0,
+      "source_out_seconds": 5,
+      "playback_rate": 1.0
+    },
+    {
+      "source": "clip_08_children",
+      "program_in_seconds": 50,
+      "program_out_seconds": 55,
+      "source_in_seconds": 0,
+      "source_out_seconds": 5,
+      "playback_rate": 1.0
+    },
+    {
+      "source": "clip_09_rabbit_look",
+      "program_in_seconds": 55,
+      "program_out_seconds": 60,
+      "source_in_seconds": 0,
+      "source_out_seconds": 5,
+      "playback_rate": 1.0
+    }
+  ],
+  "audio_cues": [
+    {
+      "source": "score",
+      "program_in_seconds": 0,
+      "duration_seconds": 60,
+      "gain": 0.24,
+      "playback_rate": 0.9843798666666667
+    },
+    {
+      "source": "sfx_park",
+      "program_in_seconds": 0,
+      "duration_seconds": 20,
+      "gain": 0.3,
+      "loop": true
+    },
+    {
+      "source": "sfx_fall",
+      "program_in_seconds": 16.7,
+      "duration_seconds": 2,
+      "gain": 0.9
+    },
+    {
+      "source": "sfx_chase",
+      "program_in_seconds": 20,
+      "duration_seconds": 15,
+      "gain": 0.55,
+      "loop": true
+    },
+    {
+      "source": "sfx_brake",
+      "program_in_seconds": 47.25,
+      "duration_seconds": 2,
+      "gain": 1.0
+    },
+    {
+      "source": "sfx_panting",
+      "program_in_seconds": 49,
+      "duration_seconds": 11,
+      "gain": 0.68,
+      "loop": true
+    },
+    {
+      "source": "sfx_popcorn",
+      "program_in_seconds": 50.2,
+      "duration_seconds": 3,
+      "gain": 0.9
+    }
+  ],
+  "audio_limiter": {
+    "limit": 0.85,
+    "auto_level": false
+  },
+  "commercials": [
+    {
+      "source": "ad_movie_night_v2",
+      "file": "movie-night-ad.mp4",
+      "program_cue_seconds": 20,
+      "copy": "Make room for movie night",
+      "music_source_in_seconds": 36,
+      "duration_seconds": 6,
+      "source_trim_seconds": 5,
+      "hold_final_frame": true,
+      "music_gain": 0.48
+    },
+    {
+      "source": "ad_popcorn",
+      "file": "popcorn-ad.mp4",
+      "program_cue_seconds": 42,
+      "copy": "A little pause. A little popcorn.",
+      "music_source_in_seconds": 49,
+      "duration_seconds": 6,
+      "source_trim_seconds": 5,
+      "hold_final_frame": true,
+      "music_gain": 0.48
+    }
+  ],
+  "playback": {
+    "program_seconds": 60,
+    "with_commercials_seconds": 72,
+    "notes": "Rendered live by the audience-filtered FireTV canvas during commercials only; no notes are baked into the media.",
+    "target": "HomeBound browser FireTV canvas; no physical casting adapter."
+  },
+  "editorial_notes": [
+    "Nine selected shots preserve the original park, train, chase, family, and rabbit ending.",
+    "The quiet living-room shot plays at half speed. Only the clean first five seconds of the braking source are used.",
+    "Children jumping and the rabbit side-eye use separate reaction shots.",
+    "Each shot is conformed to its exact 24 fps duration; commercial end frames are held to six seconds.",
+    "Commercial typography is added in the edit using Avenir Next. The right third stays quiet for live notes."
+  ],
+  "outputs": [
+    {
+      "path": "app/web/static/media/park-chase.mp4",
+      "bytes": 21528983,
+      "sha256": "c6e29b3e4aaf079b544d2646322c27bd940d3f3d8150f95a1fedc2eeec628048",
+      "duration_seconds": 60,
+      "video_frames": 1440,
+      "mean_audio_dbfs": -23.2,
+      "sample_peak_dbfs": -1.2,
+      "true_peak_dbfs": -1.1,
+      "full_decode": "passed"
+    },
+    {
+      "path": "app/web/static/media/movie-night-ad.mp4",
+      "bytes": 1261815,
+      "sha256": "85cc8c91bf505289e96f92b4ee672e731f9a6bdd69e55bfb20c4feb2bd33202e",
+      "duration_seconds": 6,
+      "video_frames": 144,
+      "mean_audio_dbfs": -20.0,
+      "sample_peak_dbfs": -6.3,
+      "true_peak_dbfs": -6.3,
+      "full_decode": "passed"
+    },
+    {
+      "path": "app/web/static/media/popcorn-ad.mp4",
+      "bytes": 970501,
+      "sha256": "8c0407015cdea3adcc73738c971c43bfc26af7386b6fd856d854651abe0b6290",
+      "duration_seconds": 6,
+      "video_frames": 144,
+      "mean_audio_dbfs": -18.7,
+      "sample_peak_dbfs": -6.3,
+      "true_peak_dbfs": -6.3,
+      "full_decode": "passed"
+    },
+    {
+      "path": "app/web/static/media/park-chase-poster.jpg",
+      "bytes": 317742,
+      "sha256": "1576e71671a84bfdaaaaa6e5f40b842bb70ffc2cecb56d3df37eabe795580772"
+    },
+    {
+      "path": "app/web/static/media/park-chase.vtt",
+      "bytes": 568,
+      "sha256": "193997f8ee1b83b247a58d5025835c4ee1a85cc3ab34cb0991587aa7f2fc0bd7"
+    }
+  ],
+  "sources": [
+    {
+      "id": "characters",
+      "provider": "Runway",
+      "task_id": "a9c85004-4caf-4b93-9b66-a318a8792308",
+      "source_sha256": "8f999a5f7d488d3f75c10de7000dde14f66eed0409c968f4d7810d2140352839",
+      "generation": {
+        "model": "nano-banana-pro",
+        "imageSize": "1K",
+        "ratio": "16:9",
+        "promptText": "One wide cinematic full-body group portrait from an original warm 3D animated family comedy, in a sunlit city-park clearing. Six distinct characters, all clearly visible with their feet in frame. Foreground left: a small cream-furred rabbit, tall pink inner ears, bright brown eyes, round cheeks, a playful asymmetrical smile and tiny paws. Foreground right: a much larger stocky cinnamon bulldog, broad cream muzzle and narrow cream blaze, floppy ears, blue collar, expressive amber eyes, elastic jowls, friendly bewildered face. Behind them are an original fictional family: a father in his thirties with warm brown skin, short dark curls, saffron sweater and charcoal trousers; a mother with warm brown skin, dark curly bob, teal cardigan over a cream shirt and navy trousers; a boy aged about six with short curls, plum hoodie and jeans; a girl aged about eight with curly pigtails, golden-yellow top and denim overalls. Parents sit close together on a simple park bench under a leafy tree while the children stand beside them. Appealing sculpted forms, tactile soft fur, rounded expressive faces, exquisite clean 3D rendering, gentle depth of field, warm sunlight, mint and gold palette, soft shadows, clear readable silhouettes. A single coherent frame. No lettering, logos, watermarks or familiar franchise characters."
+      }
+    },
+    {
+      "id": "frame_01_park",
+      "provider": "Runway",
+      "task_id": "e8ff0925-5226-46d7-9b7a-0335d78643ac",
+      "source_sha256": "0b24429f0ddc8cf4b8ddd8bd07dbcc07097b4fb36f843b8795605d8bd4993768",
+      "generation": {
+        "model": "nano-banana-pro",
+        "imageSize": "1K",
+        "ratio": "16:9",
+        "promptText": "Create one original cinematic 3D animation frame using @cast for the exact family, rabbit and bulldog identities, outfits, faces, fur colors and proportions. A beautiful wide establishing view of a bustling city park inspired by Central Park in warm late-afternoon sunlight. On the left a father in a saffron sweater and mother in a teal cardigan sit close together on a wooden bench under an enormous leafy tree, happily talking to each other, not posing for camera. Their two children in plum and golden yellow play with a red ball on the lawn in the middle distance among a few other children. A coral-red local commuter train approaches a small tree-lined station in the right background, where a few passengers wait. The cream rabbit from @cast balances on a low branch above a soft pile of fallen leaves; the cinnamon bulldog with blue collar rests by the tree. Soft mint-and-gold foliage, long warm shadows, whimsical clean 3D shapes, tactile fur, clear silhouettes, deep readable scene staging. A single coherent film frame, no text or logos."
+      }
+    },
+    {
+      "id": "frame_02_train",
+      "provider": "Runway",
+      "task_id": "a55492c3-2e40-4cdf-b280-52891384ea9b",
+      "source_sha256": "37f707406c428a9fc3e51660d39ab2bd34bb533fb01e221d6db614cc78ccd193",
+      "generation": {
+        "model": "nano-banana-pro",
+        "imageSize": "1K",
+        "ratio": "16:9",
+        "promptText": "One cinematic 3D film frame continuing the exact coral-red local train, park, late-afternoon light and rounded visual style of @park. Medium-wide three-quarter side view of the stopped train at its small leafy station. An open train doorway has two broad shallow steps down to the platform. Three distinct everyday passengers are beginning to disembark: a cheerful older woman with a tote at the top step, a young adult with a backpack waiting just inside, and a man already on the platform turning to walk toward the park. Clearly visible legs and steps, natural candid poses, spacious platform, warm friendly atmosphere, clean soft 3D rendering. Keep the train stationary and make the boarding steps visually unambiguous. No animal characters in the foreground, no readable signs, logos or lettering."
+      }
+    },
+    {
+      "id": "frame_03_fall",
+      "provider": "Runway",
+      "task_id": "705f3afa-a714-441d-9268-b6b9116939a0",
+      "source_sha256": "84c8488db72796d1e85777bcb87ec4e0353f3df623b38ce2ad317909d9d81d9c",
+      "generation": {
+        "model": "nano-banana-pro",
+        "imageSize": "1K",
+        "ratio": "16:9",
+        "promptText": "One medium-wide cinematic 3D cartoon frame in the same tree setting and warm afternoon light as @park, with the exact cream rabbit and cinnamon bulldog from @cast, including fur patterns, faces and the dog's blue collar. At left-center the small cream rabbit is precariously balanced on a low tree branch, arms out, ears askew, about to lose its balance. A deep soft mound of golden fallen leaves is directly below. At lower right the stocky bulldog sits beside the leaf pile and looks up with startled raised brows. Show the entire rabbit, entire dog, branch, and leaf pile clearly in one frame; the fall is a short harmless distance. Park bench and greenery remain softly in the background. Playful readable staging, tactile fur, soft shadows, rounded expressive original 3D characters, no text or logos."
+      }
+    },
+    {
+      "id": "frame_04_chase",
+      "provider": "Runway",
+      "task_id": "051862a6-cc06-4e03-a8ce-337d7e181b49",
+      "source_sha256": "87680f351967fe44fc932286e33e11b4b914b558eb9cf5d7357b97da59832e5c",
+      "generation": {
+        "model": "nano-banana-pro",
+        "imageSize": "1K",
+        "ratio": "16:9",
+        "promptText": "One energetic low tracking-camera 3D film frame in the same warm mint-and-gold park as @park. Use the exact cream rabbit and stocky cinnamon bulldog with blue collar from @cast; preserve faces, proportions and fur. Both animals face and move toward the right of the frame along a winding park path. The rabbit is clearly ahead at right-center in a nimble bounding pose; the larger bulldog chases behind from left-center, paws scrambling, jowls wobbling and ears swept back by wind. Golden leaves swirl in a gust around their feet. A few distant children and station passengers safely watch the harmless commotion from the background lawn. Full bodies and all paws readable, energetic elastic poses with believable 3D weight, expressive humorous faces, cinematic depth, no lettering or logos."
+      }
+    },
+    {
+      "id": "frame_05_shortcut",
+      "provider": "Runway",
+      "task_id": "37127927-cdf0-429d-8316-c00d6b1f313a",
+      "source_sha256": "c6aa409a5f85e00204f8099f44985a4eb8738d7200ce830d81f4af7205d662b9",
+      "generation": {
+        "model": "nano-banana-pro",
+        "imageSize": "1K",
+        "ratio": "16:9",
+        "promptText": "One lively cinematic 3D film frame continuing the exact cream rabbit and cinnamon bulldog from @cast, in the same golden windy park neighborhood as @park. At the park edge a curving path leads past a brick townhouse with an open front doorway on the right, warm amber light visible in its entrance hall. The rabbit is ahead near the doorway, darting toward it. The bulldog behind is leaning comically too far into the curve, all four paws scrambling and ears flapping, about to correct an oversteer. Dry golden leaves swirl in a strong gust across the path; a corner of the coral train station is far behind. Low wide tracking-camera composition, full animals visible, harmless elastic physical comedy, tactile fur, soft warm shadows, no readable signs or lettering."
+      }
+    },
+    {
+      "id": "frame_06_living_room",
+      "provider": "Runway",
+      "task_id": "22993f85-85d2-4f3a-887b-e719240ce3b9",
+      "source_sha256": "279b69d54a7a86052bf8281f7d8e7ba84923be7661fcd02248550fa61c334af9",
+      "generation": {
+        "model": "nano-banana-pro",
+        "imageSize": "1K",
+        "ratio": "16:9",
+        "promptText": "Create one original cinematic 3D animation frame using @cast for the exact four family members, faces, hair and outfits. The same parents and two children are comfortably seated together on a large teal sofa, watching television and sharing cream bowls of fluffy popcorn. Dad wears saffron, Mum teal, boy plum, girl golden yellow with denim overalls. A large cozy living room at early evening: warm amber lamps, oak floor, cream rug, bookshelves, framed abstract art, a glowing television on the left wall. Wide cinematic view with the sofa across the rear-left, an open house doorway at rear-center, and a sturdy wooden dining table on the front-right with clear empty space beneath it. Leave an unobstructed route from the doorway toward the foreground rug. No animals are present in this opening frame. Everyone looks naturally toward the television rather than the camera. Lush clean original 3D rendering, rounded expressive figures, tactile materials, soft warm shadows. One coherent film frame, no logos or lettering."
+      }
+    },
+    {
+      "id": "frame_07_brake_v2",
+      "provider": "Runway",
+      "task_id": "5b8ad662-d4e4-4cb0-8956-038e2d7678bb",
+      "source_sha256": "df2d168d6ca0bc51d9abac4b72c907253a9e79b7d061af281c84609db37ba006",
+      "generation": {
+        "model": "nano-banana-pro",
+        "imageSize": "1K",
+        "ratio": "16:9",
+        "promptText": "Create one cheerful original 3D animated film still using the fictional cartoon characters from @cast and the cozy interior from @room. Preserve the teal sofa at rear-left, the warm open hallway in the center and the oak dining table at front-right. The four family members are seated on the sofa with popcorn, watching television. In the wide open floor area there is exactly one cream rabbit near the dining table and exactly one stocky cinnamon bulldog wearing a blue collar at the hallway entrance. Both animals are fully visible, facing into the living room, with friendly curious expressions and natural playful poses. Leave clear space around the animals and furniture. Warm amber lamplight, rounded expressive faces, tactile fur, clean cinematic rendering. One coherent family-comedy composition without lettering."
+      }
+    },
+    {
+      "id": "frame_08_children",
+      "provider": "Runway",
+      "task_id": "9c6f3029-e751-4b0c-8942-b3c75f19e7be",
+      "source_sha256": "916fd2de89487494cfa175e65ea5aa6a6334cde548868269f3aeca93d9872547",
+      "generation": {
+        "model": "nano-banana-pro",
+        "imageSize": "1K",
+        "ratio": "16:9",
+        "promptText": "One warm original 3D cartoon film frame, a medium-wide frontal view of the teal sofa in @room with the exact four fictional family members from @cast. Fill most of the frame with the sofa and family so the children's whole bodies are easy to see. The boy in a plum hoodie sits at the left end and the girl in a golden-yellow top and denim overalls sits at the right end; both lean forward in excited delighted surprise, feet on the cushions, ready to spring upward while holding cream popcorn bowls. Dad in saffron and Mum in teal sit between them, smiling with amused surprise. A few loose popcorn kernels near the bowls. Clear expressive faces and natural anatomy, full children from hair to feet, soft cozy amber light, rounded cinematic 3D rendering. Four people only. No animals in this closer reaction shot, no lettering."
+      }
+    },
+    {
+      "id": "frame_08_last_laugh",
+      "provider": "Runway",
+      "task_id": "114f28b5-5da5-4844-81c3-716a355c95c8",
+      "source_sha256": "db847255e427866890e2d868d1086afe16ebca92f5146a4bfc9a9d54aa4e88b4",
+      "generation": {
+        "model": "nano-banana-pro",
+        "imageSize": "1K",
+        "ratio": "16:9",
+        "promptText": "One cinematic 3D comedy film frame in the exact living room from @room, preserving all six character designs from @cast. Camera at low knee height beside the front-right dining table, with the full family visible on the teal sofa in the left background. The boy in plum and girl in golden yellow are poised on the edge of their seats, eyes wide in delighted surprise, popcorn bowls tipped slightly, ready to jump up laughing; the parents look amused. At center-left the cinnamon bulldog with blue collar has stopped safely, standing on all four paws, tongue out, shoulders heaving, looking baffled toward the table. In the right foreground the cream rabbit peeks from under the dining table beside a thick wooden leg, clearly facing the panting dog with a mischievous sideways glance and tiny smug smile. Clear eye-line between rabbit and dog, no duplicates. Warm soft lamplight, tactile fur and upholstery, clean appealing original 3D film rendering, no lettering."
+      }
+    },
+    {
+      "id": "frame_ad_movie_night",
+      "provider": "Runway",
+      "task_id": "0ce41526-6cb5-48a9-9c40-34c169d20cbf",
+      "source_sha256": "3728dc58430a637523b64150169806f8bd24ae57cbb84b1a98b36a46ac22c37a",
+      "generation": {
+        "model": "nano-banana-pro",
+        "imageSize": "1K",
+        "ratio": "16:9",
+        "promptText": "One polished original 3D house-promo frame using the warm cozy visual style, teal upholstery and amber lighting of @room. A sumptuous teal sofa with soft cushions fills the left half. In front-left a small oak side table holds a cream bowl of fluffy popcorn, softly lit by a glowing amber standing lamp. Calm warm evening atmosphere, rounded tactile shapes, exquisite gentle shadows. There are no people or animals. Compose all main objects in the left two-thirds; the right third is quiet softly lit warm neutral wall with subtle depth and ample empty space for a separate live note card. A single coherent 16:9 composition, no generated lettering, logos, prices or brand marks."
+      }
+    },
+    {
+      "id": "frame_ad_popcorn",
+      "provider": "Runway",
+      "task_id": "7289d8d7-53ae-449d-ba2a-325861c7be02",
+      "source_sha256": "5783c319ac9f8a265cf8e2322a716fcf28679b633cff621e7c2a24437883a707",
+      "generation": {
+        "model": "nano-banana-pro",
+        "imageSize": "1K",
+        "ratio": "16:9",
+        "promptText": "One playful polished original 3D house-promo frame with the same teal-and-amber cozy living-room color palette and tactile rounded rendering as @room. A cream ceramic bowl on a small oak table in the left half of the picture is filled with fluffy golden popcorn, with a few kernels suspended just above the bowl at the start of a gentle playful pop. Warm lamplight and softly blurred teal upholstery behind it. Keep the right third a calm uncluttered amber background so a separate live FireTV note can be read. Beautiful soft shadows and appetizing stylized kernels, no people or animals, no text, logos, prices or packaging."
+      }
+    },
+    {
+      "id": "clip_01_park",
+      "provider": "Runway",
+      "task_id": "96888682-7dcd-47aa-9d74-9d0dfde45123",
+      "source_sha256": "87b2e712f8458b7bb409dc2aa04329e155c2dbd3fdbaebb4ed4cec8fbdb48652",
+      "generation": {
+        "model": "gen-4-turbo",
+        "duration": 10,
+        "ratio": "16:9",
+        "resolution": "720p",
+        "generateAudio": false,
+        "promptText": "Warm cinematic 3D cartoon animation. A slow, gentle camera dolly reveals a lively park afternoon. The couple under the tree turn toward one another and chat with small natural gestures. Their children toss the red ball and run playfully on the lawn. The coral local train rolls slowly into the station and settles to a stop. Wind stirs the leaves and clothing. The cream rabbit remains perched on the low branch, ears twitching; the bulldog rests beneath the tree and blinks. Clear believable movement, stable character identities and proportions, soft sunlight, cheerful everyday atmosphere. One continuous wide shot."
+      },
+      "start_frame": "frame_01_park"
+    },
+    {
+      "id": "clip_02_train",
+      "provider": "Runway",
+      "task_id": "b42f6cce-1531-44ad-aa03-f10007c4ec39",
+      "source_sha256": "a9c6fb46cbe23924f0596a16ba53aa094fa7886e94001d90a5151da3ca512277",
+      "generation": {
+        "model": "gen-4-turbo",
+        "duration": 5,
+        "ratio": "16:9",
+        "resolution": "720p",
+        "generateAudio": false,
+        "promptText": "Locked, slightly drifting cinematic camera. The coral train remains completely stationary. The smiling older passenger carefully walks down the two broad steps onto the platform with her tote, then strolls toward the park. The backpack passenger follows through the open doorway. The man already on the platform walks out of frame. Clear natural foot placement, each person moves independently, clothing sways in a gentle breeze. Preserve the train design and sunny rounded 3D cartoon style. One continuous readable shot of passengers descending."
+      },
+      "start_frame": "frame_02_train"
+    },
+    {
+      "id": "clip_03_fall",
+      "provider": "Runway",
+      "task_id": "f1d5bfe3-2d55-471a-9d00-2b4f6f1556c9",
+      "source_sha256": "79ddf9b47d4a6b5776a7abaa98a85baa0f6529adf0cce9b8d50278e37d2160a6",
+      "generation": {
+        "model": "gen-4-turbo",
+        "duration": 5,
+        "ratio": "16:9",
+        "resolution": "720p",
+        "generateAudio": false,
+        "promptText": "Playful 3D cartoon slapstick in one continuous shot. The cream rabbit wobbles on the low branch, windmills its ears and loses balance. It drops a short distance into the soft pile of leaves, sending a little golden leaf puff upward, then pops up completely fine and bounds toward the right. The stocky bulldog's brows spring up in surprise; it turns its head to follow the rabbit. Gentle squash-and-stretch, soft springy landing, clear gravity and full-body action. Keep both animal identities stable and the camera wide enough to show the landing."
+      },
+      "start_frame": "frame_03_fall"
+    },
+    {
+      "id": "clip_04_chase",
+      "provider": "Runway",
+      "task_id": "d5af324e-640e-4afb-8a09-159ca02f6d4a",
+      "source_sha256": "3ebdc2877a23559973c551f5889ba7f4de3d8504013772b61d195ebc220037b6",
+      "generation": {
+        "model": "gen-4-turbo",
+        "duration": 10,
+        "ratio": "16:9",
+        "resolution": "720p",
+        "generateAudio": false,
+        "promptText": "Energetic continuous side-tracking shot at animal height. The cream rabbit runs and bounds rapidly toward the right along the winding park path. The stocky cinnamon bulldog with blue collar gallops after it, comically oversteering each turn with scrambling paws and bouncing jowls. The camera keeps both animals in frame as the park moves past behind them. Wind whips their ears and swirls dry golden leaves in curling gusts. Background onlookers react with amused surprise from the lawn. Fast, funny elastic 3D movement with believable weight and clean silhouettes, stable faces and proportions."
+      },
+      "start_frame": "frame_04_chase"
+    },
+    {
+      "id": "clip_05_shortcut",
+      "provider": "Runway",
+      "task_id": "e092513f-efe0-43c1-8cb1-f93a6bc31394",
+      "source_sha256": "6f2f4af97f61e25fb365917ede7950a0adf41376d224e0fba6c6684a352a87b8",
+      "generation": {
+        "model": "gen-4-turbo",
+        "duration": 5,
+        "ratio": "16:9",
+        "resolution": "720p",
+        "generateAudio": false,
+        "promptText": "Fast playful continuous 3D tracking shot. The cream rabbit bounds through the open doorway on the right and disappears into the warmly lit hall. The cinnamon bulldog with blue collar skids a little too wide on the curved path, scrambles back into line and follows the rabbit inside. Ears and jowls flap, golden leaves whirl in a strong gust, paws patter with elastic cartoon weight. Keep the same animal designs and sunny neighborhood. The camera follows smoothly toward the doorway, ending on the warm entrance."
+      },
+      "start_frame": "frame_05_shortcut"
+    },
+    {
+      "id": "clip_06_living_room_v2",
+      "provider": "Runway",
+      "task_id": "99121de3-5529-4c21-b4f1-11f6240d7fb9",
+      "source_sha256": "91adc11dff76d7ba194123304b73e05a971bc403969c569d59557d4042b29dea",
+      "generation": {
+        "model": "gen-4-turbo",
+        "duration": 5,
+        "ratio": "16:9",
+        "resolution": "720p",
+        "generateAudio": false,
+        "promptText": "Locked-off cinematic wide shot. The four existing family members remain seated together in their current positions for the entire shot. They look toward the television on the left with small natural smiles, blinking and breathing. The seated father lifts one piece of popcorn to his mouth. The two seated children hold their bowls and watch happily. The seated mother smiles quietly. The furniture, doorway, floor area and number of people remain unchanged. Subtle television light flickers across the warm cozy room. Calm minimal motion in an original 3D animated movie-night scene."
+      },
+      "start_frame": "frame_06_living_room"
+    },
+    {
+      "id": "clip_07_brake",
+      "provider": "Runway",
+      "task_id": "57769d5f-ec17-425f-8250-b123da4f3b03",
+      "source_sha256": "293346f0d6ed704655c5cc5f63dd830c7bbd2d01698484a817854d012d682531",
+      "generation": {
+        "model": "gen-4-turbo",
+        "duration": 10,
+        "ratio": "16:9",
+        "resolution": "720p",
+        "generateAudio": false,
+        "promptText": "One continuous wide 3D cartoon shot with a locked camera. The small cream rabbit springs to its feet and scampers behind the nearest dining-table leg on the right. The stocky cinnamon bulldog bounds forward from the hallway after it. Midway through the shot the dog suddenly braces all four paws, leans its body backward and skids across the wooden floor to an exaggerated abrupt stop before the table, with wobbling jowls and one little comic dust puff. The dog stays safely clear of the table and family. After stopping it stands still, panting with its tongue out. The four existing family members remain seated and turn their heads toward the pets. Preserve the room and cast. Friendly rubbery slapstick with a clearly readable car-like braking action."
+      },
+      "start_frame": "frame_07_brake_v2"
+    },
+    {
+      "id": "clip_08_children",
+      "provider": "Runway",
+      "task_id": "1c0e40b0-660b-46ab-aba2-e564b3a1d0b7",
+      "source_sha256": "d9d9dfd307e6807e28e8e48babc6eb2ff4167834937c4325ef1b1b85ef2a2712",
+      "generation": {
+        "model": "gen-4-turbo",
+        "duration": 5,
+        "ratio": "16:9",
+        "resolution": "720p",
+        "generateAudio": false,
+        "promptText": "The camera eases back slightly to give headroom. The two children already at the ends of the sofa, the boy in plum on the left and girl in golden yellow on the right, BOTH spring upward from their seats once in exaggerated delighted surprise, laughing. Their popcorn bowls tip and a small arc of popcorn flies up, then gently rains onto the sofa. They settle back onto the cushions, still giggling. Their two parents remain seated between them, smiling in amused disbelief. Keep exactly these four people and their identities. Lively readable full-body 3D cartoon reaction, warm cozy light."
+      },
+      "start_frame": "frame_08_children"
+    },
+    {
+      "id": "clip_09_rabbit_look",
+      "provider": "Runway",
+      "task_id": "b89b6f2d-9b9c-4eff-a075-0aba4f71830d",
+      "source_sha256": "6406144c877f4ae588931e8afb7d9ec5fd293c6ea9ee981c65313f9a574c4474",
+      "generation": {
+        "model": "gen-4-turbo",
+        "duration": 5,
+        "ratio": "16:9",
+        "resolution": "720p",
+        "generateAudio": false,
+        "promptText": "Locked low camera in this cozy 3D cartoon scene. The cream rabbit under the table gives the bulldog one slow sideways glance, raises one eyebrow into a tiny tight-lipped smirk, and flicks a single ear. The bulldog stays in its current position, tongue out, visibly panting with its shoulders rising and falling. The four seated people in the background remain in their places. Very small expressive motions, stable faces and bodies, warm soft light. End by holding the rabbit's mischievous glance toward the tired dog."
+      },
+      "start_frame": "frame_08_last_laugh"
+    },
+    {
+      "id": "score",
+      "provider": "Runway",
+      "task_id": "2b933c42-5210-4ff2-85d3-5409e9c10804",
+      "source_sha256": "b26cb90763a6f40132b60b1e3e5c9e295ee4c37aa18de0bd022ceea815fcec19",
+      "generation": {
+        "model": "lyria-3-pro",
+        "name": "A little hare-raising afternoon - original score",
+        "promptText": "Original instrumental orchestral comedy score for a warm, playful 3D cartoon. Pizzicato strings, nimble clarinet and bassoon, soft woodblocks, light brushed percussion and occasional celesta. Begin with a gentle sunny park feeling, turn into a buoyant mischievous animal chase at about 138 BPM, briefly soften for a cozy family movie night, then finish with a short surprised stop and a cheeky warm cadence. Playful and charming, never menacing. A compact roughly one-minute musical arc, clear phrase endings suitable for editing. No vocals, no spoken words, no recognizable existing melody."
+      }
+    },
+    {
+      "id": "sfx_park",
+      "provider": "Runway",
+      "task_id": "3fb2d0f8-0f36-4aa0-a7cb-6a3f799e4a81",
+      "source_sha256": "38240c5cd4bbf481a8f30ca5755fd05e16526c29aa7b588271ccbb0d23bb4aa5",
+      "generation": {
+        "name": "Sunny park and local train ambience",
+        "duration": 8,
+        "loop": true,
+        "promptText": "Gentle city-park ambience: small birds chirping in leafy trees, a breeze rustling leaves, faint distant children playing happily, and a soft local electric train rumble with one pleasant distant door chime. Warm spacious outdoor sound, no intelligible speech, no music, no loud traffic."
+      }
+    },
+    {
+      "id": "sfx_fall",
+      "provider": "Runway",
+      "task_id": "6964f417-f528-4361-aa0e-0b37ac96e3fa",
+      "source_sha256": "a9e751a5e74aadb62561ae02e11efc8dde8b8c873c09ae89de22d819b4f8b3e3",
+      "generation": {
+        "name": "Rabbit tumble and soft comic bounce",
+        "duration": 2,
+        "promptText": "A short playful cartoon slide-whistle swoops downward, followed by a soft springy boing and a rustle of dry leaves as a tiny rabbit harmlessly tumbles from a low branch. Clean dry foley, cheerful and gentle, no music or voices."
+      }
+    },
+    {
+      "id": "sfx_chase",
+      "provider": "Runway",
+      "task_id": "48df0c69-d29f-4cfb-a876-2e0ae4eae36c",
+      "source_sha256": "c67c2bd1c9005ccd1e5e8daf2b10dad7d8f8b16402690011e854e4fb3cd84b9a",
+      "generation": {
+        "name": "Windy rabbit and bulldog chase",
+        "duration": 4,
+        "loop": true,
+        "promptText": "Rapid comical small and heavy animal paws pattering on a park path, fluttering ears and rustling dry leaves whipped by a breezy gust. Playful bounding rhythm with light gravel scuffs and soft wind whooshes. Seamless looping outdoor chase foley, no music or speech."
+      }
+    },
+    {
+      "id": "sfx_brake",
+      "provider": "Runway",
+      "task_id": "a041f59f-0c70-43df-8057-20a2ff05e874",
+      "source_sha256": "18bc2fd32301756f3f5da6467a4ce995db7c1852e9cc9466120383469b113004",
+      "generation": {
+        "name": "Bulldog comic emergency brake",
+        "duration": 2,
+        "promptText": "A funny exaggerated rubber tire-screech as a cartoon bulldog digs all four paws in and skids to an abrupt halt: quick rising squeal, a short rubbery skid, then a soft thump. Clean dry studio foley, no vehicle engine, no crash, no music, no voices. Comical rather than frightening."
+      }
+    },
+    {
+      "id": "sfx_panting",
+      "provider": "Runway",
+      "task_id": "59d33abf-4be5-44fa-b6a5-956f57b03737",
+      "source_sha256": "4a6cd2a3b005bb0b183fbef70d2a50a395613726517d2818c831840c5894f4e9",
+      "generation": {
+        "name": "Exhausted puzzled bulldog panting",
+        "duration": 4,
+        "loop": true,
+        "promptText": "A friendly stocky bulldog panting after a ridiculous run, rhythmic open-mouth huffing with a slightly floppy-jowled wet breath and a tiny puzzled snuffle. Close clean indoor foley, no barking or growling, no music or human speech. A natural seamless loop."
+      }
+    },
+    {
+      "id": "sfx_popcorn",
+      "provider": "Runway",
+      "task_id": "2b3eaccd-d50e-403c-a74a-f02fa79c3274",
+      "source_sha256": "b65705c0a0ec4dba98b39ea445bd40f60bafb913312f85270759b3897d2e8a8e",
+      "generation": {
+        "name": "Popcorn surprise",
+        "duration": 3,
+        "promptText": "A quick playful surprised gasp from two children, followed by several light popcorn pops, a bowl rattle and soft little kernels pattering onto a rug. Warm family-comedy reaction, delighted surprise rather than fear. No words, no screaming, no music."
+      }
+    },
+    {
+      "id": "ad_movie_night_v2",
+      "provider": "Runway",
+      "task_id": "22bda6e9-8ffa-48db-a3d5-b27866668267",
+      "source_sha256": "eb1e12970c3c83cbb02476037f396fb252b0d724458b10519cb675747e27acb5",
+      "generation": {
+        "model": "gen-4-turbo",
+        "duration": 5,
+        "ratio": "16:9",
+        "resolution": "720p",
+        "generateAudio": false,
+        "promptText": "A slow cinematic camera glide toward the cream popcorn bowl and inviting teal sofa. Warm amber lamplight gently brightens the soft fabric and wooden table. The cozy empty room remains exactly as shown, with calm uncluttered wall space on the right. Subtle elegant 3D movement, soft shadows, stable furniture and objects. One continuous polished movie-night promo shot."
+      },
+      "start_frame": "frame_ad_movie_night"
+    },
+    {
+      "id": "ad_popcorn",
+      "provider": "Runway",
+      "task_id": "0d6d3812-8108-4d6c-bc3c-58c23419bf22",
+      "source_sha256": "7e240a77acb43ac3a10091ab680e89477ff4494de65cbcaa821ad5400c34f888",
+      "generation": {
+        "model": "gen-4-turbo",
+        "duration": 5,
+        "ratio": "16:9",
+        "resolution": "720p",
+        "generateAudio": false,
+        "promptText": "A playful polished 3D popcorn promo in one continuous gentle camera push. Fluffy golden popcorn kernels pop upward from the cream bowl, turn slowly in the air, then tumble softly back into the bowl with a cheerful little bounce. Keep the bowl and action on the left two-thirds and the right third calm and uncluttered. Warm amber light, soft teal background, appealing stylized texture, graceful slow-motion movement, no added text or new objects."
+      },
+      "start_frame": "frame_ad_popcorn"
+    }
+  ]
+}
