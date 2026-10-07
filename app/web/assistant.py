@@ -23,6 +23,7 @@ from app.web.conversation import (
     DialogueContext,
     validate_interpretation,
 )
+from app.web.escalations import approval_snapshot, remember_approval
 from app.web.scenarios import (
     SCENARIOS,
     TARGETS,
@@ -74,6 +75,8 @@ def present_result(raw: Any) -> dict[str, Any] | None:
             "intent_hash",
             "authority_outcome",
             "escalation_expires_at",
+            "escalation_status",
+            "escalation_mode",
         )
         if isinstance(raw.get(key), str) and len(raw[key]) <= 256
     }
@@ -149,8 +152,20 @@ def action_reply(trace: list[dict[str, Any]], fallback: str, scenario_id: str | 
             "viewStream": "Access to the simulated front door camera was granted. There is no physical video feed in this demo.",
         }.get(event.get("action"), "The authorized action completed in the home simulator.")
     if decision == "ESCALATE" and execution == "NOT_PERFORMED":
-        return "This request needs approval. Complete the approval in Decionis Presence, then choose Check approval here. No device action has run."
+        if result.get("escalation_status") in {"PRESENCE_VERIFIED", "REAUTHORIZING"}:
+            return "Approval is verified. I'm waiting for the final authorization."
+        if result.get("escalation_status") == "PENDING_PRESENCE":
+            return "The household approval request is being prepared."
+        claims = invoked[-1].get("arguments", {}).get("context_signals", {})
+        if claims.get("user") == "child":
+            return "Your parent needs to approve that first."
+        return "I'm waiting for household approval."
     if decision == "BLOCK" and execution == "NOT_PERFORMED":
+        reasons = set(result.get("reason_codes", []))
+        if reasons & {"INTENT_EXPIRED", "EXPIRED"} or result.get("escalation_status") == "EXPIRED":
+            return "The approval window expired. No device action ran. You can make a new request when you're ready."
+        if reasons & {"REJECTED", "CANCELLED"} or result.get("escalation_status") in {"REJECTED", "CANCELLED"}:
+            return "The approval was declined or cancelled. No device action ran."
         return "That request was blocked by the home's authorization rules. No device action was performed."
     if decision == "ALLOW" and execution == "NOT_PERFORMED":
         return "Authorization was granted, but the device action was not completed. Check the action record before trying again."
@@ -219,6 +234,13 @@ class WebAssistant:
         if cached is not None:
             return cached
         async with session.lock:
+            if scenario_id == "conversation" and message.lower().strip(" .?!") in {
+                "check approval", "alexa, check approval", "alexa check approval",
+                "check the approval", "check approval status",
+            }:
+                return await self._check_from_conversation(
+                    session, request_id, fingerprint, message, "unknown"
+                )
             agent = await self._get_agent()
             if scenario_id == "conversation":
                 return await self._converse_home(session, request_id, fingerprint, message, agent)
@@ -293,8 +315,34 @@ class WebAssistant:
             facts["reply"] = BedrockOrchestrator._message_text(
                 {"content": [{"text": facts["reply"]}]}
             )
+            if facts["intent"] == "checkApproval":
+                return await self._check_from_conversation(
+                    session, request_id, fingerprint, message, facts["approval_target"]
+                )
+            if facts["intent"] == "cancel" and not session.dialogue.action:
+                if session.pending:
+                    for pending in session.pending.values():
+                        pending.update(automatic=False, check_state="paused")
+                    answer = (
+                        "I've stopped automatic approval checks. Decline the request in Decionis "
+                        "Presence to cancel the approval itself. No cancellation has been sent from this screen."
+                    )
+                else:
+                    answer = "There's no unsubmitted request to cancel. Any completed action is recorded in Home details."
+                return self._finish(
+                    session, request_id, fingerprint, message, "conversation", [],
+                    answer, None,
+                )
             action, answer = session.dialogue.advance(facts)
             if action:
+                if any(item.get("target") == TARGETS[action] for item in session.pending.values()):
+                    session.dialogue.consume_action()
+                    return self._finish(
+                        session, request_id, fingerprint, message, "conversation", [],
+                        "There's already an approval request for that device. Say 'check approval' "
+                        "to check the saved request, or decline it in Decionis Presence first.",
+                        None,
+                    )
                 context = session.dialogue.signals(self.web_settings.home_timezone)
                 purpose_key = "reason" if action == "disarmSystem" else "purpose"
                 arguments = {
@@ -348,51 +396,92 @@ class WebAssistant:
             captured_signals=context,
         )
 
-    async def resume(
-        self, session: Conversation, request_id: str, correlation_id: str
+    async def _check_from_conversation(
+        self, session: Conversation, request_id: str, fingerprint: str, message: str, target: str
     ) -> dict[str, Any]:
-        fingerprint = json.dumps(["resume", correlation_id])
+        matches = [
+            key for key, pending in session.pending.items()
+            if target == "unknown" or pending.get("target") == target
+        ]
+        if len(matches) == 1:
+            return await self._resume_saved(
+                session, request_id, fingerprint, matches[0], message=message
+            )
+        answer = (
+            "There isn't a saved approval request to check. No approval has been assumed."
+            if not matches else
+            "Which approval should I check: the side gate, home security, or the camera? "
+            "You can also use the Check approval button for that request."
+        )
+        return self._finish(
+            session, request_id, fingerprint, message, "conversation", [], answer, None
+        )
+
+    async def resume(
+        self, session: Conversation, request_id: str, correlation_id: str, *, automatic: bool = False
+    ) -> dict[str, Any]:
+        fingerprint = json.dumps(["resume", correlation_id, automatic])
         cached = self._cached(session, request_id, fingerprint)
         if cached is not None:
             return cached
         async with session.lock:
-            original = session.pending.get(correlation_id)
-            if original is None:
-                raise WebError(
-                    "ESCALATION_NOT_FOUND",
-                    "This conversation has no pending request with that identifier.",
-                    404,
-                )
-            trace: list[dict[str, Any]] = [
-                {
-                    "name": "resumeEscalation",
-                    "arguments": {"correlation_id": correlation_id},
-                    "invoked": True,
-                }
-            ]
-            warning = None
-            try:
-                result = await asyncio.wait_for(self._resume_call(correlation_id), timeout=180)
-                if result.get("correlation_id") != correlation_id:
-                    raise ValueError("Escalation correlation mismatch")
-                trace[0]["result"] = result
-                if result.get("decision") in {"ALLOW", "BLOCK"}:
-                    session.pending.pop(correlation_id, None)
-            except Exception as error:
-                LOGGER.warning("approval check incomplete error_type=%s", type(error).__name__)
-                warning = (
-                    "The approval check could not be confirmed. The saved handoff was not replaced."
-                )
-            return self._finish(
-                session,
-                request_id,
-                fingerprint,
-                "Check approval",
-                original["scenario_id"],
-                trace,
-                "",
-                warning,
+            return await self._resume_saved(
+                session, request_id, fingerprint, correlation_id, automatic=automatic
             )
+
+    async def _resume_saved(
+        self, session: Conversation, request_id: str, fingerprint: str, correlation_id: str,
+        *, message: str = "Check approval", automatic: bool = False,
+    ) -> dict[str, Any]:
+        original = session.pending.get(correlation_id)
+        if original is None:
+            raise WebError(
+                "ESCALATION_NOT_FOUND", "This conversation has no pending request with that identifier.", 404
+            )
+        if original.get("check_state") == "uncertain":
+            return self._finish(
+                session, request_id, fingerprint, message, original["scenario_id"], [],
+                "The last approval check lost its execution result. Review the action record "
+                "before making another request; the device may already have run.", None,
+            )
+        if automatic and (
+            not original.get("automatic") or time.monotonic() < original.get("next_check_at", 0)
+        ):
+            raise WebError("APPROVAL_CHECK_NOT_DUE", "This approval isn't due for an automatic check.", 409)
+        trace: list[dict[str, Any]] = [{
+            "name": "resumeEscalation", "arguments": {"correlation_id": correlation_id}, "invoked": True,
+        }]
+        warning = None
+        try:
+            result = await asyncio.wait_for(self._resume_call(correlation_id), timeout=180)
+            if result.get("correlation_id") != correlation_id:
+                raise ValueError("Escalation correlation mismatch")
+            decision, execution = result.get("decision"), result.get("execution")
+            if (
+                decision not in {"ALLOW", "BLOCK", "ESCALATE", "AUTHORITY_UNAVAILABLE"}
+                or execution not in {"PERFORMED", "NOT_PERFORMED", "UNKNOWN"}
+                or (decision in {"BLOCK", "ESCALATE"} and execution != "NOT_PERFORMED")
+                or (decision == "AUTHORITY_UNAVAILABLE" and execution == "PERFORMED")
+            ):
+                raise ValueError("Invalid escalation result")
+            trace[0]["result"] = result
+            if result.get("decision") in {"ALLOW", "BLOCK"}:
+                session.pending.pop(correlation_id, None)
+            elif result.get("decision") == "AUTHORITY_UNAVAILABLE":
+                original.update(
+                    automatic=False,
+                    check_state="uncertain" if result.get("execution") == "UNKNOWN" else "unavailable",
+                )
+            elif result.get("decision") == "ESCALATE" and not automatic:
+                original["automatic"] = True
+        except Exception as error:
+            LOGGER.warning("approval check incomplete error_type=%s", type(error).__name__)
+            original.update(automatic=False, check_state="uncertain")
+            warning = "The approval check could not be confirmed. Automatic checks stopped; review the action record."
+        return self._finish(
+            session, request_id, fingerprint, "Approval update" if automatic else message,
+            original["scenario_id"], trace, "", warning, background=automatic,
+        )
 
     def _finish(
         self,
@@ -406,6 +495,7 @@ class WebAssistant:
         warning: str | None,
         *,
         captured_signals: dict[str, Any] | None = None,
+        background: bool = False,
     ) -> dict[str, Any]:
         safe_trace = []
         for entry in trace:
@@ -424,7 +514,7 @@ class WebAssistant:
                 and result.get("execution") == "NOT_PERFORMED"
                 and correlation
             ):
-                session.pending[correlation] = {"scenario_id": scenario_id}
+                remember_approval(session.pending, safe, scenario_id)
             event = result.get("execution_event") or {}
             if (
                 result.get("decision") == "ALLOW"
@@ -453,14 +543,20 @@ class WebAssistant:
             "captured_context": captured_signals,
             "follow_up": follow_up,
             "speech_text": f"{reply[:1650]} {follow_up}".strip(),
+            "approvals": approval_snapshot(session.pending),
+            "background": background,
+            "notify": not background or not safe_trace or any(
+                (entry.get("result") or {}).get("decision") != "ESCALATE" for entry in safe_trace
+            ),
         }
-        session.history.extend(
-            [{"role": "user", "text": message}, {"role": "assistant", "text": reply}]
-        )
-        session.history[:] = session.history[-12:]
-        session.turns.append(turn)
-        session.turns[:] = session.turns[-12:]
-        if safe_trace:
+        if turn["notify"]:
+            session.history.extend(
+                [{"role": "user", "text": message}, {"role": "assistant", "text": reply}]
+            )
+            session.history[:] = session.history[-12:]
+            session.turns.append(turn)
+            session.turns[:] = session.turns[-12:]
+        if safe_trace and turn["notify"]:
             session.activity.append(turn)
             session.activity[:] = session.activity[-32:]
         session.replies[request_id] = (fingerprint, turn)

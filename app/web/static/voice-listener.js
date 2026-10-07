@@ -9,11 +9,14 @@ class ContinuousVoiceListener {
     this.connecting = this.timer = this.limitTimer = null;
     this.connectionGeneration = this.captureGeneration = 0;
     this.listening = false;
+    this.detector = null;
   }
 
   get ready() {
     return this.context?.state === "running" && this.stream?.getAudioTracks().some((track) => track.readyState === "live");
   }
+
+  get hearingSpeech() { return this.listening && Boolean(this.detector?.heardSpeech); }
 
   async connect() {
     // This call also runs directly from Start talking, preserving the gesture.
@@ -82,7 +85,7 @@ class ContinuousVoiceListener {
     try { recorder = new MediaRecorder(this.stream, { mimeType }); }
     catch (error) { this.onError(error); return false; }
     this.recorder = recorder;
-    const detector = new SpeechEndDetector(performance.now());
+    const detector = this.detector = new SpeechEndDetector(performance.now());
     const samples = new Float32Array(this.analyser.fftSize);
     let chunks = [], bytes = 0;
     recorder.addEventListener("dataavailable", (event) => {
@@ -138,6 +141,7 @@ class ContinuousVoiceListener {
 
   suspend() {
     this.listening = false;
+    this.detector = null;
     this.captureGeneration += 1;
     this.clearTimers();
     const recorder = this.recorder;

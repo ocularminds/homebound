@@ -113,6 +113,21 @@ body[data-state="muted"] .status-dot { background: #b997ad; box-shadow: none; }
 .clear-button { margin-right: 24px; }
 .pending-request { background: #d9ba7120; border-radius: 12px; padding: 14px; margin-top: 15px; font-size: 12px; display: flex; align-items: center; justify-content: space-between; gap: 15px; }
 .resume-button { border: 1px solid #d7c29055; border-radius: 8px; background: #dfc68915; color: #efdca7; padding: 8px 12px; white-space: nowrap; }
+.approval-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 15px 24px; text-align: left; width: min(590px, 100%); margin: 24px auto 0; padding: 20px 23px; border: 1px solid #d6c08838; border-radius: 19px; background: linear-gradient(115deg, #c9b67715, #a6bfd906); }
+.approval-copy { display: grid; gap: 4px; min-width: 0; }
+.approval-copy strong { font-size: 14px; font-weight: 500; color: #f3e1b6; }
+.approval-copy > span { font-size: 11px; color: #b3c9da; }
+.approval-copy .approval-eyebrow { font-size: 8px; letter-spacing: 1.5px; color: #c1ac7f; margin-bottom: 4px; }
+.approval-clock { font-size: 10px; color: #93aabd; font-variant-numeric: tabular-nums; }
+.approval-controls { display: grid; justify-items: center; gap: 9px; }
+.approval-hint { flex-basis: 100%; margin: 0; font-size: 11px; line-height: 1.6; color: #93abc0; }
+body[data-has-approval="true"] .voice-stage { padding: 12px 0; }
+body[data-has-approval="true"] .alexa-orb { width: 100px; height: 100px; margin-bottom: 0; }
+body[data-has-approval="true"] .orb-ring { inset: 13px; }
+body[data-has-approval="true"] .orb-center { inset: 17px; }
+body[data-has-approval="true"] .status-line { margin-bottom: 12px; }
+body[data-has-approval="true"] .heard-text { margin-bottom: 12px; }
+body[data-has-approval="true"] .approval-card { margin-top: 18px; padding: 16px 20px; }
 @keyframes ring-drift { to { transform: rotate(360deg); } }
 @keyframes breathe { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
 @keyframes aurora-drift { to { transform: rotate(-13deg) translate(7%, 5%); opacity: .6; } }

@@ -9,12 +9,13 @@ const ui = {
 };
 const emptyActivity = ui.activity.cloneNode(true);
 const state = {
-  config: null, turns: [], activity: [], pending: new Set(), dialogue: null,
+  config: null, turns: [], activity: [], pending: new Set(), dialogue: null, deviceSnapshot: null,
   busy: false, starting: false, micEnabled: true, speechEnabled: true,
   typing: false, mode: "connecting", showGreeting: true, greeted: false,
   pendingMessage: null, pollTimer: null, voiceGeneration: 0, transcriptionAbort: null,
   audio: null, audioUrls: new Map(), speechGeneration: 0, speechAbort: null,
   playing: false, finishAudio: null, pendingPlayback: null,
+  approvals: [], approvalTimer: null, approvalCheck: null, approvalAnnouncements: [], active: true,
 };
 
 function el(tag, className = "", text = "") {
@@ -81,11 +82,13 @@ function renderStage(mode = state.mode) {
   outcomeHolder.replaceChildren();
   if (showTurn && !pending && latest.trace?.length) {
     const entry = latest.trace.filter((item) => item.invoked).at(-1) || latest.trace.at(-1);
-    outcomeHolder.append(badge(entry));
-    const details = el("button", "text-button", "View details");
-    details.type = "button";
-    details.addEventListener("click", () => openDialog("home-dialog"));
-    outcomeHolder.append(details);
+    if (!(entry.result?.decision === "ESCALATE" && state.approvals.some((item) => item.correlation_id === entry.result.correlation_id))) {
+      outcomeHolder.append(badge(entry));
+      const details = el("button", "text-button", "View details");
+      details.type = "button";
+      details.addEventListener("click", () => openDialog("home-dialog"));
+      outcomeHolder.append(details);
+    }
   }
 }
 
@@ -103,7 +106,9 @@ function updateControls() {
   ui.voiceToggle.disabled = !state.config?.voice_configured;
   $("#type-button").disabled = state.busy;
   $("#clear-chat").disabled = state.busy;
-  document.querySelectorAll("[data-prompt], .resume-button").forEach((button) => { button.disabled = state.busy; });
+  document.querySelectorAll("[data-prompt], .resume-button").forEach((button) => {
+    button.disabled = state.busy || Boolean(state.approvalCheck);
+  });
 }
 function renderContext(dialogue, captured = null) {
   state.dialogue = dialogue || state.dialogue;
@@ -124,7 +129,10 @@ function renderContext(dialogue, captured = null) {
 function outcome(entry) {
   const result = entry.result || {};
   if (!entry.invoked) return { label: "NOT SUBMITTED", kind: "unknown" };
+  if (result.execution === "UNKNOWN") return { label: "RESULT NEEDS REVIEW", kind: "unknown" };
   if (result.decision === "ESCALATE") return { label: "APPROVAL NEEDED", kind: "hold" };
+  if (result.decision === "BLOCK" && result.escalation_status === "EXPIRED") return { label: "APPROVAL EXPIRED", kind: "block" };
+  if (result.decision === "BLOCK" && ["REJECTED", "CANCELLED"].includes(result.escalation_status)) return { label: "APPROVAL DECLINED", kind: "block" };
   if (result.decision === "BLOCK") return { label: "BLOCKED", kind: "block" };
   if (result.decision === "ALLOW" && result.execution === "PERFORMED") return { label: "ALLOWED · EXECUTED", kind: "allow" };
   if (result.decision === "ALLOW") return { label: "ALLOWED · NOT EXECUTED", kind: "hold" };
@@ -186,7 +194,7 @@ function renderActivity() {
     detail.append(el("p", "", trace.invoked ? (trace.result ? "HomeBound MCP returned this action result." : "The MCP call was attempted; no result was received.") : "Stopped before MCP invocation."));
     const evidence = result.dossier_evidence;
     detail.append(el("p", "", evidence?.verified && evidence.trust_anchor === "DECIONIS_OFFICIAL" ? "Dossier verification: verified against the official Decionis trust anchor." : "Dossier verification: no verified proof reported for this request."));
-    for (const [field, title] of [["decision", "Authority decision"], ["execution", "Execution"], ["correlation_id", "Correlation"], ["dossier_id", "Dossier"], ["grant_id", "Grant"], ["escalation_expires_at", "Approval expires"]]) {
+    for (const [field, title] of [["decision", "Authority decision"], ["execution", "Execution"], ["correlation_id", "Correlation"], ["dossier_id", "Dossier"], ["grant_id", "Grant"], ["escalation_status", "Approval status"], ["escalation_expires_at", "Approval expires"]]) {
       if (result[field]) {
         const line = el("p", "", `${title}: `);
         line.append(el("code", "", result[field]));
@@ -205,19 +213,123 @@ function renderActivity() {
 function renderPending() {
   const holder = $("#pending-requests");
   holder.replaceChildren();
-  for (const correlation of state.pending) {
+  const main = $("#approval-status");
+  main.replaceChildren();
+  main.hidden = !state.approvals.length;
+  document.body.dataset.hasApproval = String(Boolean(state.approvals.length));
+  for (const approval of state.approvals) {
     const row = el("div", "pending-request");
-    row.append(el("span", "", "Complete this request in Decionis Presence, then check its approval."));
-    const button = el("button", "resume-button", "Check approval");
-    button.type = "button";
-    button.addEventListener("click", () => checkApproval(correlation));
-    row.append(button);
+    const text = el("div", "approval-copy");
+    text.append(el("strong", "", approval.label), el("span", "", approval.status_label));
+    if (approval.expires_at) {
+      const clock = el("small", "approval-clock");
+      clock.dataset.approvalExpires = approval.expires_at;
+      text.append(clock);
+    }
+    row.append(text);
+    if (approval.can_check) row.append(approvalButton(approval));
+    else row.append(el("span", "subtle", "Review the action history before asking again."));
     holder.append(row);
   }
+  const first = state.approvals[0];
+  if (first) {
+    const copy = el("div", "approval-copy");
+    copy.append(el("span", "approval-eyebrow", state.approvals.length > 1 ? state.approvals.length + " REQUESTS NEED APPROVAL" : "APPROVAL NEEDED"));
+    copy.append(el("strong", "", first.label), el("span", "approval-state", first.status_label));
+    if (first.expires_at) {
+      const clock = el("small", "approval-clock");
+      clock.dataset.approvalExpires = first.expires_at;
+      copy.append(clock);
+    }
+    const controls = el("div", "approval-controls");
+    if (first.can_check) controls.append(approvalButton(first));
+    const details = el("button", "text-button", "Approval details");
+    details.type = "button";
+    details.addEventListener("click", () => openDialog("home-dialog"));
+    controls.append(details);
+    main.append(copy, controls);
+    main.append(el("p", "approval-hint", first.check_state === "uncertain"
+      ? "The last result couldn't be confirmed. Automatic checks have stopped."
+      : first.automatic
+      ? "Complete the request in Decionis Presence. I'll check for updates while we talk."
+      : "Complete the request in Decionis Presence, then say “check approval”."));
+  }
+  updateApprovalClocks();
+  updateControls();
+}
+function approvalButton(approval) {
+  const button = el("button", "resume-button", "Check approval");
+  button.type = "button";
+  button.addEventListener("click", () => checkApproval(approval.correlation_id));
+  return button;
+}
+function updateApprovalClocks() {
+  document.querySelectorAll("[data-approval-expires]").forEach((node) => {
+    const remaining = Math.ceil((Date.parse(node.dataset.approvalExpires) - Date.now()) / 1000);
+    node.textContent = !Number.isFinite(remaining) ? "" : remaining > 0
+      ? "Approval window · " + Math.floor(remaining / 60) + ":" + String(remaining % 60).padStart(2, "0") + " remaining"
+      : "Approval window ended";
+  });
+}
+function setApprovals(approvals) {
+  state.approvals = (approvals || []).map((item) => ({ ...item, checkAt: Date.now() + item.next_check_in * 1000 }));
+  state.pending = new Set(state.approvals.map((item) => item.correlation_id));
+  renderPending();
+  scheduleApprovalCheck();
+}
+function scheduleApprovalCheck() {
+  clearTimeout(state.approvalTimer);
+  state.approvalTimer = null;
+  if (!state.active || (!state.approvals.length && !state.approvalAnnouncements.length)) return;
+  state.approvalTimer = setTimeout(async () => {
+    updateApprovalClocks();
+    flushApprovalAnnouncement();
+    const next = state.approvals.find((item) => item.automatic && item.checkAt <= Date.now());
+    if (next && !state.approvalCheck && !state.busy && !state.playing && !state.typing && !dialogOpen()
+      && !listener.hearingSpeech && document.visibilityState === "visible") {
+      state.approvalCheck = pollApproval(next);
+      updateControls();
+      await state.approvalCheck;
+      state.approvalCheck = null;
+      updateControls();
+      flushApprovalAnnouncement();
+    }
+    scheduleApprovalCheck();
+  }, 1000);
+}
+async function pollApproval(approval) {
+  try {
+    const turn = await request("/api/resume", {
+      request_id: crypto.randomUUID(), correlation_id: approval.correlation_id, automatic: true,
+    });
+    setApprovals(turn.approvals);
+    if (turn.notify) state.approvalAnnouncements.push(turn);
+  } catch (error) {
+    // A lost check may already have reached execution. Recover retained state,
+    // never replay it automatically just because the browser lost the reply.
+    approval.automatic = false;
+    if (!["REQUEST_IN_PROGRESS", "APPROVAL_CHECK_NOT_DUE", "ESCALATION_NOT_FOUND"].includes(error.code)) notice(error.message);
+    await refreshAfterFailure();
+  }
+}
+function flushApprovalAnnouncement() {
+  if (!state.active || !state.approvalAnnouncements.length || state.approvalCheck || state.busy || state.playing
+    || state.starting || state.typing || listener.hearingSpeech || dialogOpen()) return false;
+  const turn = state.approvalAnnouncements.shift();
+  acceptTurn(turn, { syncApprovals: false });
+  if (state.speechEnabled) playReply(turn.id);
+  return state.speechEnabled;
 }
 
 function renderDevices(snapshot) {
-  const devices = snapshot?.state;
+  // A spoken approval update can wait for the user to finish talking. Its older
+  // execution snapshot must not replace one received from a newer action.
+  const previousTime = Date.parse(state.deviceSnapshot?.timestamp);
+  const nextTime = Date.parse(snapshot?.timestamp);
+  if (snapshot && (!Number.isFinite(previousTime) || (Number.isFinite(nextTime) && nextTime >= previousTime))) {
+    state.deviceSnapshot = snapshot;
+  }
+  const devices = state.deviceSnapshot?.state;
   const fields = [
     ["#gate-state", devices?.door_locked?.side_gate, "Locked", "Unlocked"],
     ["#security-state", devices?.security_system_armed?.home_security, "Armed", "Disarmed"],
@@ -231,18 +343,14 @@ function renderDevices(snapshot) {
 }
 
 
-function acceptTurn(turn) {
+function acceptTurn(turn, { syncApprovals = true } = {}) {
   state.pendingMessage = null;
   state.showGreeting = false;
   if (!state.turns.some((item) => item.id === turn.id)) state.turns.push(turn);
   state.turns = state.turns.slice(-12);
   if (turn.trace?.length && !state.activity.some((item) => item.id === turn.id)) state.activity.push(turn);
   state.activity = state.activity.slice(-32);
-  for (const entry of turn.trace || []) {
-    const result = entry.result || {};
-    if (result.decision === "ESCALATE" && result.correlation_id) state.pending.add(result.correlation_id);
-    if (["ALLOW", "BLOCK"].includes(result.decision) && result.correlation_id) state.pending.delete(result.correlation_id);
-  }
+  if (syncApprovals) setApprovals(turn.approvals);
   renderConversation(); renderActivity(); renderPending(); renderDevices(turn.device_state);
   renderContext(turn.dialogue, turn.captured_context);
   renderStage();
@@ -251,7 +359,8 @@ function applyBootstrap(data) {
   state.config = data;
   state.turns = data.turns;
   state.activity = data.activity;
-  state.pending = new Set(data.pending);
+  state.deviceSnapshot = data.device_state;
+  setApprovals(data.approvals);
   renderConversation(); renderActivity(); renderPending(); renderDevices(data.device_state);
   renderContext(data.dialogue);
   updateControls();
@@ -260,8 +369,10 @@ function applyBootstrap(data) {
 function dialogOpen() { return Boolean(document.querySelector("dialog[open]")); }
 function resumeListening() {
   if (state.busy || state.playing || state.starting || dialogOpen()) return;
+  if (flushApprovalAnnouncement()) return;
   if (state.typing) { renderStage("typing"); return; }
   if (!state.micEnabled) { renderStage("muted"); return; }
+  if (listener.listening && listener.ready) { renderStage("listening"); return; }
   if (!listener.listen()) {
     ui.start.hidden = false;
     renderStage("interaction");
@@ -418,6 +529,8 @@ async function transcribeUtterance(audio) {
 async function submitMessage(message) {
   message = message.trim();
   if (!message || state.busy || !state.config) return;
+  if (state.approvalCheck) await state.approvalCheck;
+  if (state.busy) return;
   listener.suspend();
   stopSpeech(false);
   notice();
@@ -452,6 +565,8 @@ async function submitMessage(message) {
   else resumeListening();
 }
 async function checkApproval(correlation) {
+  if (state.busy) return;
+  if (state.approvalCheck) await state.approvalCheck;
   if (state.busy) return;
   listener.suspend(); stopSpeech(false); notice();
   state.busy = true;
@@ -537,7 +652,9 @@ $("#export-history").addEventListener("click", () => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 window.addEventListener("pagehide", () => {
+  state.active = false;
   pauseListening(); stopSpeech(false); clearTimeout(state.pollTimer);
+  clearTimeout(state.approvalTimer);
   state.audioUrls.forEach((url) => URL.revokeObjectURL(url));
   state.audioUrls.clear();
 });
