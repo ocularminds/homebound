@@ -5,6 +5,21 @@ deployment. The Fire TV app and private home store stay on the local home
 runtime. AgentCore interprets public scene context; EventBridge V2, FIFO queues
 and Lambda transport the three labelled simulator event types.
 
+## Verified deployment - 23 October 2026
+
+`homebound-canvas-foundation` and `homebound-canvas` are deployed in `us-east-1`.
+The private `canvas` endpoint is READY on runtime version 1, the FIFO worker is
+enabled, and the running local home backend uses the cloud planner and receiver.
+The [verification record](cloud-verification.json) includes the artifact digests
+and successful checks.
+
+Seven cloud events exercised presence, inventory and cartoon program/break/
+resume through a disposable receiver. A separate cloud event reached the
+running home's persistent state in 1.65 seconds with guest privacy preserved;
+a web conversation completed through AgentCore. CloudWatch is receiving usage
+logs and the three alarms are healthy without notification actions. The
+submitted judge bundle's checksum remains unchanged.
+
 ## Foundation and artifacts
 
 Use a current AWS CLI with `eventsv2` and AgentCore support, Docker with ARM64
@@ -191,7 +206,9 @@ the dedicated network; service-managed ENIs can remain for several hours.
 When diagnosing CloudFormation failures, use `describe-events --filters
 FailedEvents=true` and distinguish provider failures from cancellation effects.
 The first rollout revealed platform log-group ownership, endpoint readiness,
-and a scoped `logs:PutResourcePolicy` permission requirement. A failed initial
+and a scoped `logs:PutResourcePolicy` permission requirement. SQS also requires
+one resource ARN per policy statement, so each queue has its own TLS policy.
+A failed initial
 stack's eight retained data resources were recovered through an IMPORT change
 set before reapplying the corrected application. Preserve their identifiers
 and inspect the import plan rather than creating duplicate retained resources.

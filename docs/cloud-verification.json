@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-10-23T19:48:40.762849+00:00",
+  "deployment_source_revision": "434e144fc1674acccbd76e169c077dfd77971cab",
+  "region": "us-east-1",
+  "foundation_stack": {
+    "name": "homebound-canvas-foundation",
+    "status": "CREATE_COMPLETE"
+  },
+  "application_stack": {
+    "name": "homebound-canvas",
+    "status": "UPDATE_COMPLETE"
+  },
+  "runtime": {
+    "endpoint": "canvas",
+    "version": "1",
+    "network_mode": "VPC",
+    "model_id": "us.amazon.nova-lite-v1:0"
+  },
+  "image_digest": "sha256:763e6099487839ed37abe4efcb216d477a6944dce06641b41997523cd1bd7918",
+  "worker_sha256": "94d3c636f04b79611a109f510919dfbe28a2b6467e2fa128fdde5f06e7d3a92e",
+  "cloud_checks": [
+    {
+      "check": "private_runtime_and_endpoint_ready",
+      "passed": true,
+      "version": "1"
+    },
+    {
+      "check": "platform_logs_encrypted_with_14_day_retention",
+      "passed": true
+    },
+    {
+      "check": "usage_telemetry_without_raw_invocation_logging",
+      "passed": true
+    },
+    {
+      "check": "typed_event_integrity",
+      "passed": true
+    },
+    {
+      "check": "bedrock_scene_planning",
+      "passed": true,
+      "seconds": 1.9
+    },
+    {
+      "check": "guardrail_allows_normal_text",
+      "passed": true
+    },
+    {
+      "check": "guardrail_blocks_synthetic_email",
+      "passed": true
+    },
+    {
+      "check": "event_delivered",
+      "passed": true,
+      "kind": "presence",
+      "outcome": "applied",
+      "seconds": 4.47
+    },
+    {
+      "check": "event_delivered",
+      "passed": true,
+      "kind": "presence",
+      "outcome": "applied",
+      "seconds": 0.71
+    },
+    {
+      "check": "event_delivered",
+      "passed": true,
+      "kind": "presence",
+      "outcome": "ignored",
+      "seconds": 0.71
+    },
+    {
+      "check": "deduplication_ordering_and_guest_privacy",
+      "passed": true
+    },
+    {
+      "check": "event_delivered",
+      "passed": true,
+      "kind": "inventory",
+      "outcome": "applied",
+      "seconds": 0.81
+    },
+    {
+      "check": "event_delivered",
+      "passed": true,
+      "kind": "media",
+      "outcome": "applied",
+      "seconds": 0.66
+    },
+    {
+      "check": "event_delivered",
+      "passed": true,
+      "kind": "media",
+      "outcome": "applied",
+      "seconds": 0.68
+    },
+    {
+      "check": "event_delivered",
+      "passed": true,
+      "kind": "media",
+      "outcome": "applied",
+      "seconds": 0.7
+    },
+    {
+      "check": "pantry_and_program_break_resume",
+      "passed": true
+    }
+  ],
+  "running_home": {
+    "cloud_event_applied": true,
+    "guest_private_notes": 0,
+    "event_seconds": 1.65,
+    "canvas_chat_http_status": 200,
+    "canvas_chat_seconds": 2.5
+  },
+  "operations": {
+    "consumer_enabled": true,
+    "worker_max_concurrency": 2,
+    "cloudwatch_alarms": 3,
+    "alarm_state": "OK",
+    "notification_actions": [],
+    "queue_tls_policies_verified": 4,
+    "platform_log_retention_days": 14,
+    "usage_log_delivery_observed": true,
+    "raw_model_invocation_logging_configured": false,
+    "cloudtrail_delivery_observed": true
+  },
+  "local_validation": {
+    "python_tests_passed": 204,
+    "javascript_tests_passed": 32,
+    "cfn_lint": "passed",
+    "cfn_guard": "passed"
+  },
+  "unresolved_image_findings": {
+    "HIGH": 3,
+    "MEDIUM": 9,
+    "LOW": 3
+  },
+  "measurement_scope": "Smoke tests for one labelled simulator home; not a production latency benchmark."
+}

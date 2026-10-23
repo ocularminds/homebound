@@ -69,10 +69,10 @@ Vega Fire TV app (WebView)        Alexa-style companion (optional Deepgram voice
 
 The model proposes an interaction; deterministic code owns audience eligibility,
 expiry, playback transitions, and draft-cart totals. Private notes are filtered
-before reaching the TV. Optional AgentCore, EventBridge, SQS, Lambda, and
-published Guardrails infrastructure is supplied in
-[`infra/firetv`](infra/firetv/); see [current validation](docs/submission/status.md)
-for deployed versus packaged components.
+before reaching the TV. The optional private AgentCore, EventBridge, SQS, Lambda,
+and published Guardrails deployment passed live cloud checks after the hackathon
+submission. See the [cloud rollout and verification](docs/cloud-deployment.md)
+and the separate [submission snapshot](docs/submission/status.md).
 
 A separate governed device path remains available for future home integrations:
 Bedrock → MCP → official Decionis AgentSafe → Decionis authority → local Ring
@@ -196,7 +196,7 @@ These tests use local fixtures for external Decionis and AWS responses; they do 
 ## Integration status and boundaries
 
 - **Web and voice:** full-screen Alexa-style simulation with time-based greetings, continuous listening between replies, Deepgram speech, and context gathered through conversation. The dialogue interpreter cannot invoke devices; the server binds a ready request before the governed MCP path. Voice requires a server-side Deepgram key and browser microphone/audio permission. Home details shows conversation claims, execution snapshots, and action evidence. See [setup and boundaries](docs/web-simulator.md).
-- **FireTV canvas:** person-aware notes, attention-aware layouts, draft scene shopping, pantry recipes, room previews, and break dashboards run locally at `/tv`. Bedrock receives public scene metadata and the simulator's own illustrated frames for scene requests. Private note retrieval and guest redaction happen on the server. AgentCore, EventBridge, and published Guardrails adapters are included; the deployed cloud route, physical FireTV/Ring/Alexa+ controls, live feeds, and Amazon Pay remain unconnected. See [behavior, AWS setup, and validation](docs/firetv-canvas.md).
+- **FireTV canvas:** person-aware notes, attention-aware layouts, draft scene shopping, pantry recipes, room previews, and break dashboards run locally at `/tv`. Bedrock receives public scene metadata and the simulator's own illustrated frames for scene requests. Private note retrieval and guest redaction happen on the server. The private AgentCore supervisor, published Guardrails policy, and EventBridge/SQS/Lambda route are deployed and verified with labelled simulator events. Physical FireTV/Ring/Alexa+ controls, live feeds, and Amazon Pay remain unconnected. See [behavior, AWS setup, and validation](docs/firetv-canvas.md).
 - **MCP:** real Python SDK Streamable HTTP server, declarative `unlockDoor`, `disarmSystem`, and `viewStream` tools, plus a governed escalation-resume tool.
 - **Action binding:** the public MCP tools retain their declarative names. The official AgentSafe intent schema requires lowercase action identifiers, so the signed Decionis intent binds vendor-neutral capabilities `home.entry.unlock`, `home.security.disarm`, or `home.camera.view_stream`; the execution adapter maps the authorized identifier to the current Ring simulator operation. Future vendor adapters can implement the same capabilities without changing household policy.
 - **Orchestration:** real Amazon Bedrock Converse tool-use integration; the configured US Nova Lite profile is active and returned a live response. Alexa+ itself is not activated in this repo. Amazon currently limits Alexa+ add-on tooling to selected partners; the documented private CodeArtifact role assumption is still denied for the provisioned IAM user (see [FL-028](friction-log/FL-028-alexaplus-partner-access.md) and [FL-030](friction-log/FL-030-alexaplus-role-assumption-denied.md)). No Alexa+ production integration is claimed.
