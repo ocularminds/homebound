@@ -49,16 +49,29 @@ its pinned pure-Python AWS dependencies. Only public app source enters either
 artifact; local configuration and household state are outside their build
 contexts. The supervisor listens on 8080 with `/ping` and `/invocations`.
 
-The [CloudFormation template](../infra/firetv/ambient-canvas.yaml) preserves
+The [application template](../infra/firetv/ambient-canvas.yaml) preserves
 private AgentCore networking, IAM invocation, exact model ARN parameters,
 encrypted transport/storage, a published Guardrails version, and a disabled
 consumer until the route has been validated. It passes the selected AWS region
 to the runtime explicitly and exports the named endpoint ARN for client IAM.
 
-Deploy in an account with enabled Bedrock inference, an immutable ECR image
-digest, a private versioned S3 worker object, and reviewed private VPC subnets
-and security groups. [Detailed parameters and rollout](firetv-canvas.md#deploy-the-optional-aws-supervisor)
-include the service validation and consumer-enablement procedure.
+The [foundation template](../infra/firetv/foundation.yaml) supplies the dedicated
+private network, service endpoints, artifact storage, ECR repository, and audit
+logging. Deploy with enabled Bedrock inference, an immutable ECR image digest,
+and a versioned S3 worker object. The [staged rollout](cloud-deployment.md)
+documents runtime readiness, endpoint creation, platform log configuration,
+and consumer enablement.
+
+The `us-east-1` deployment passed live checks on 23 October 2026 after the
+hackathon submission: model-backed recipe planning, published Guardrails,
+all three event types, duplicate handling, guest privacy, and program/break/
+resume reached a disposable home receiver through the actual AWS pipeline.
+The three alarms remain in CloudWatch without notification destinations.
+See the rollout guide for costs and unresolved base-image scan findings.
+
+For this checkout, `scripts/run-demo.sh --cloud --with-services` loads the
+generated non-secret `.homebound/cloud-deployment/runtime.env` after the normal
+local configuration. Select the pinned Node version first.
 
 Local template checks, a container build, and a deployed end-to-end run are
 separate results. `/ping` only proves the process is alive. Record an actual

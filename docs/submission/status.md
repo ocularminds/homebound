@@ -4,6 +4,10 @@ HomeBound was submitted to the **Build, Ship, Shape: Amazon Developer Hackathon*
 on 23 October 2026 as **Decionis Inc (United States)**. Devpost confirmed
 "Project submitted!" before the 19:00 UTC deadline.
 
+This page records the submitted snapshot. The subsequent
+[AWS cloud deployment](../cloud-deployment.md) is documented separately; the
+uploaded video and judge bundle are unchanged.
+
 - [Public submission](https://devpost.com/software/alexa-can-open-the-door-should-it)
 - Primary track: **Fire TV**; mini challenges: **AWS Builder** and **Open Source**.
 - [Final video](https://youtu.be/z0_36x-JmDA): 2:51, with captions.

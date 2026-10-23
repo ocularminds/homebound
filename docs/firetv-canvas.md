@@ -2,7 +2,7 @@
 
 HomeBound turns a living-room screen into a context-sensitive companion: the right note for the person present, a recipe that accounts for the pantry, or a quiet view of home during a break. The implementation lives at `/tv`, alongside the Alexa-style voice screen at `/`.
 
-The canvas runs in an installable Amazon Vega WebView app and in desktop browsers, with original illustrated scenes and a Runway-generated 3D cartoon. The Vega Virtual Device run was verified on 23 October 2026; see [Fire TV setup](../apps/firetv/README.md). Bedrock interpretation and the configured Deepgram speech service are real. Ring/Alexa+ sensors, physical FireTV playback, camera video, weather, commercial detection, product offers, and Amazon Pay are not connected. The AWS supervisor and transports are implemented and tested with service fixtures, with infrastructure supplied for a separate deployment.
+The canvas runs in an installable Amazon Vega WebView app and in desktop browsers, with original illustrated scenes and a Runway-generated 3D cartoon. The Vega Virtual Device run was verified on 23 October 2026; see [Fire TV setup](../apps/firetv/README.md). Bedrock interpretation and the configured Deepgram speech service are real. Ring/Alexa+ sensors, physical FireTV playback, camera video, weather, commercial detection, product offers, and Amazon Pay are not connected. The private AWS supervisor and event pipeline were deployed and verified in `us-east-1` after submission; see the [cloud rollout](cloud-deployment.md).
 
 ## Try the experience
 
@@ -86,7 +86,7 @@ the end. The media endpoint returns HTTP 206 for byte-range requests.
 
 ## What runs where
 
-| Component | Local behavior | AWS path supplied |
+| Component | Local behavior | AWS path |
 | --- | --- | --- |
 | Supervisor | Bedrock Converse selects one `composeCanvas` proposal | The same planner runs behind AgentCore `/invocations`. |
 | Context agent | Server selects notes for the current audience and attention level | Routed presence events trigger the same receiver policy. |
@@ -115,7 +115,7 @@ Normalized event -> EventBridge V2 custom bus -> SQS FIFO
     -> Lambda -> AgentCore supervisor -> SQS FIFO -> home receiver -> TV
 ```
 
-Events route by kind without an LLM call. A request to plan a conversation invokes Bedrock separately. Model latency never holds the local state lock while an audience change is waiting. Cloud delivery remains asynchronous and has not been latency-tested in AWS.
+Events route by kind without an LLM call. A request to plan a conversation invokes Bedrock separately. Model latency never holds the local state lock while an audience change is waiting. Cloud delivery is asynchronous. The deployed smoke test exercised seven events for one demo home; production throughput and latency remain uncharacterized.
 
 ## Privacy and state lifecycle
 
@@ -145,7 +145,7 @@ The server screens incoming text before inference and the exact note body before
 
 The supplied policy blocks common sensitive identifiers and high-strength harmful content categories. Guardrails is additional content screening, not proof of who is watching. The renderer accepts only fixed local artwork and text components, so no model-generated images can enter an overlay; arbitrary visual-output screening is not implemented. Local regex screening is explicitly labelled and is not equivalent to AWS Guardrails.
 
-Do not enable raw Bedrock model-invocation logging for real notes without a reviewed retention and access policy: original sensitive input can enter logs before masking. Application diagnostics omit event/note bodies and provider assessments. Structured AgentCore application logs and worker logs have KMS encryption and bounded retention in the template; inspect the account's other default runtime logs and telemetry before using household data.
+Do not enable raw Bedrock model-invocation logging for real notes without a reviewed retention and access policy: original sensitive input can enter logs before masking. Application diagnostics omit event/note bodies and provider assessments. The deployment uses AgentCore `USAGE_LOGS`; `APPLICATION_LOGS` includes raw invocation payloads. Usage and worker logs have KMS encryption and 14-day retention. The configuration helper applies the same controls to platform-created runtime logs, and the verifier checks them before the home receiver is enabled.
 
 ## Event and API contracts
 
@@ -175,14 +175,14 @@ Alexa's normal dialogue interpreter also routes notes, recipes, scene shopping, 
 
 ## Deploy the optional AWS supervisor
 
-[`infra/firetv/ambient-canvas.yaml`](../infra/firetv/ambient-canvas.yaml) supplies the encrypted V2 bus, ordered subscriber, input/output queues and failure queues, published Guardrails version, private AgentCore runtime and named endpoint, Lambda bridge, logs, and alarms. It does not create household identity, media rights, device credentials, payment integration, a VPC, or an artifact repository.
+[`infra/firetv/ambient-canvas.yaml`](../infra/firetv/ambient-canvas.yaml) supplies the encrypted V2 bus, ordered subscriber, input/output queues and failure queues, published Guardrails version, private AgentCore runtime and named endpoint, Lambda bridge, logs, and alarms. [`foundation.yaml`](../infra/firetv/foundation.yaml) supplies the dedicated private VPC, service endpoints, artifact storage, ECR repository and audit trail. Household identity, media rights, physical device access and payment integration remain separate integration work.
 
-Before deploying, select a supported region, an account with enabled Bedrock tool/image inference, an ARM64 ECR repository, an existing private versioned S3 artifact bucket in that region, and private subnets/security groups with the required AWS connectivity. Use a stack name of at most 48 characters for the log-delivery names. Inspect private network egress, the AgentCore service-linked role, CloudTrail audit coverage, and the region's resource availability. These account-aware checks have not run in this phase.
+Before deploying, select a supported region and an account with enabled Bedrock tool/image inference. Use a stack name of at most 48 characters for log-delivery names. Inspect private network egress, the AgentCore service-linked role, CloudTrail audit coverage, and the region's resource availability. These checks completed for the `us-east-1` deployment; repeat them for another environment. The [rollout guide](cloud-deployment.md) lists the foundation and application parameters.
 
 Build artifacts from the project root:
 
 ```bash
-docker build --platform linux/arm64 -f infra/firetv/Dockerfile -t homebound-canvas:review .
+docker build --platform linux/arm64 --provenance=false -f infra/firetv/Dockerfile -t homebound-canvas:review .
 python scripts/build_canvas_worker.py
 ```
 
@@ -190,7 +190,7 @@ The Dockerfile-specific ignore file keeps local environment files, audit data, d
 
 Prepare CloudFormation parameters for the artifact locations, model ID, **exact model/inference-profile ARNs** (including routed model regions), subnet IDs, security groups, and a unique runtime name. No account IDs or household credentials are hard-coded in the template. Runtime IAM grants inference and screening only; the bridge grants access only to its queues and deployed runtime endpoint. KMS grants include the new custom bus's branch-key actions. The deployment role needs the corresponding key-management checks during creation; publishers need `events:PutRawEvents` and `kms:Decrypt` for this bus/key.
 
-Create and review a CloudFormation change set with `CAPABILITY_IAM`. Run service pre-deployment validation and inspect findings before execution. `EnableConsumer` defaults to `false`. Check that the runtime and `canvas` endpoint are ready, invoke its typed event and plan operations with IAM, verify model/Guardrails permissions and application-log delivery, then update that parameter to `true`. `/ping` verifies process health; it is not an inference or credentials check. Wire the three alarms to an approved operator destination; the template does not send notifications automatically.
+Create and review a CloudFormation change set with `CAPABILITY_IAM`. Run service pre-deployment validation and inspect findings before execution. Both `CreateRuntimeEndpoint` and `EnableConsumer` default to `false`. Wait for the runtime to report `READY`, then create the `canvas` endpoint with its verified `EndpointRuntimeVersion`. Configure platform logs and verify typed event/plan calls, model access and Guardrails before enabling the consumer. `/ping` verifies process health; it is not an inference or credentials check. The current three alarms stay in CloudWatch with no outbound notification actions. Follow the [staged commands and verification](cloud-deployment.md#runtime-configuration-and-verification).
 
 For this web process to use the deployed runtime/receiver, configure:
 
@@ -216,7 +216,7 @@ A subscriber replacement should be deployed alongside the old subscriber, verifi
 
 ## Validation
 
-Local tests cover guest and stale-audience redaction, explicit recipients, note expiry/restart, delayed and duplicate events, old playback signals, pantry freshness, draft-only purchases, room restoration, scene changes during inference, Guardrails failures/policy changes, API boundaries, and Alexa topic changes. AWS tests use botocore's current service models and explicit fixtures; they do not represent a deployed AWS run.
+Local tests cover guest and stale-audience redaction, explicit recipients, note expiry/restart, delayed and duplicate events, old playback signals, pantry freshness, draft-only purchases, room restoration, scene changes during inference, Guardrails failures/policy changes, API boundaries, and Alexa topic changes. Unit-level AWS tests use botocore service models and fixtures. The separate live verification script exercises the deployed stack.
 
 ```bash
 python -m pytest -q
@@ -231,9 +231,11 @@ python scripts/fetch_canvas_guard_rules.py
 .homebound/cfn-guard/bin/cfn-guard validate --rules .homebound/aws-guard-rules --rules infra/firetv/canvas.guard --data infra/firetv/ambient-canvas.yaml --output-format json --show-summary none
 ```
 
-Local schema validation passes in both listed regions. Guard reports zero violations: seven applicable AWS rules and nine HomeBound rules pass; the Lambda public-permission rule is inapplicable because no such resource is created. Deliberately changing the runtime to public networking, permitting wildcard role actions, removing log encryption, or using `DRAFT` causes the custom checks to fail. These checks do not prove IAM effectiveness, live connectivity, model entitlement, or cloud deployment readiness. Service pre-deployment checks and a deployed end-to-end run remain separate work.
+`make validate-infra` validates both templates in the two listed regions and runs the pinned AWS and project guard rules with zero violations. Custom checks enforce private networking, scoped role actions, encrypted retained data, published Guardrails, usage-only telemetry, staged endpoint creation, and bounded worker concurrency. AWS service validation and live verification separately confirmed the deployed configuration.
 
-The canvas and player release passed 188 Python tests and 32 JavaScript tests. The completed-media update reran its six Python playback tests and ten JavaScript player tests successfully. The Lambda zip was built and imported without access to the developer environment's site packages. Live local Bedrock requests exercised note creation, illustrated cooking/jacket interpretation, a contextual cart follow-up, and reading mode. A request through Alexa's normal dialogue route saved a note visible on the TV and returned Deepgram speech successfully. Browser checks covered guest redaction, media attention, pantry updates, restoration, remote focus, long-note containment, and 390/1440/1920-pixel layouts. The Docker daemon did not respond to its version probe, so the ARM64 container image build remains unverified; no container or cloud deployment was attempted.
+The current release passes 204 Python tests and 32 JavaScript tests, including GitHub CI. The ARM64 container and pinned Lambda ZIP build successfully. Live local Bedrock requests exercised note creation, illustrated cooking/jacket interpretation, a contextual cart follow-up, and reading mode. A request through Alexa's normal dialogue route saved a note visible on the TV and returned Deepgram speech successfully. Browser checks covered guest redaction, media attention, pantry updates, restoration, remote focus, long-note containment, and 390/1440/1920-pixel layouts.
+
+The post-submission cloud run verified private runtime/endpoint readiness, real recipe planning, normal-text allowance and synthetic-email blocking by published Guardrails, and all three event types through EventBridge V2, FIFO queues, Lambda, AgentCore and a disposable home receiver. Seven delivered events covered guest privacy, stale-presence rejection, inventory changes and cartoon program/break/resume; a repeated publication was deduplicated. Measured delivery times in this smoke test were 0.66-4.47 seconds. CloudWatch alarms, TLS queue policies and audit delivery were read back successfully. Costs, reproduction steps and unresolved image scan findings are in the [rollout guide](cloud-deployment.md).
 
 ## Platform and API references
 
