@@ -1,0 +1,95 @@
+schema-version = 1
+
+[package]
+title = "HomeBound"
+version = "0.1.0"
+build_number = 1
+id = "com.ocularminds.homebound"
+
+# The development bridge is reverse-forwarded to the simulator. No public HTTP.
+[network-traffic-policy.cleartext]
+allowed-domains = ["127.0.0.1", "localhost"]
+
+[os.version]
+min = "1.2"
+target = "1.2"
+
+[needs]
+[[needs.module]]
+id = "/com.amazon.vega.os@IVega_1_2"
+
+[[needs.module]]
+id = "/com.amazon.kepler.keplerscript_4@IKeplerScript_0"
+
+[[needs.module]]
+id = "/com.amazon.kepler.webview_4@IWebview_4"
+
+
+
+[components]
+[[components.interactive]]
+id = "com.ocularminds.homebound.main"
+runtime-module = "/com.amazon.kepler.runtime.react_native_kepler_4@IReactNativeKepler_0"
+launch-type = "singleton"
+categories = ["com.amazon.category.main"]
+
+[wants]
+# Web renderer service for rendering web content
+[[wants.service]]
+id = "com.amazon.webview.renderer_service"
+
+# If Web App needs keyboard support
+[[wants.service]]
+id = "com.amazon.inputmethod.service"
+
+# If Web App needs video playback
+[[wants.service]]
+id = "com.amazon.media.server"
+
+[[wants.service]]
+id = "com.amazon.media.playersession.service"
+
+# Required for emitting metrics from video playback
+[[wants.service]]
+id = "com.amazon.mediametrics.service"
+
+# Required for video playback on stable APIs
+[[wants.service]]
+id = "com.amazon.mediabuffer.service"
+[[wants.service]]
+id = "com.amazon.mediatransform.service"
+
+# If Web App needs audio playback
+[[wants.service]]
+id = "com.amazon.audio.stream"
+
+# Required for audio management features to work in WebView, features like audio focus, volume control
+[[wants.service]]
+id = "com.amazon.audio.control"
+
+[[wants.service]]
+id = "com.amazon.audio.system"
+
+[[wants.privilege]]
+id = "com.amazon.devconf.privilege.accessibility"
+
+# To enable accessibility support for your app, we recommend you add the UCC service with the Service Registrar
+[[wants.service]]
+id = "com.amazon.kepler.ucc.publisher"
+
+# Uncomment below section to enable encrypted media playback (DRM content)
+# [[wants.service]]
+# id = "com.amazon.drm.key"
+# [[wants.service]]
+# id = "com.amazon.drm.crypto"
+# [[needs.privilege]]
+# id = "com.amazon.privilege.security.file-sharing"
+
+# Enable Group-IPC to access media services
+[[wants.service]]
+id = "com.amazon.gipc.uuid.*"
+[offers]
+[[offers.service]]
+id = "com.amazon.gipc.uuid.*"
+
+# You may add other services as needed

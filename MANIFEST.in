@@ -1,0 +1,10 @@
+include README.md LICENSE requirements.lock requirements-dev.lock .node-version
+recursive-include app/web/static *
+recursive-include agentsafe *.mjs *.sh package.json package-lock.json .env.example
+recursive-include scripts *.py *.sh
+recursive-include infra *.yaml *.json *.guard *.txt Dockerfile Dockerfile.dockerignore
+recursive-include docs *.md *.png
+recursive-include policies *.yaml *.json
+recursive-include friction-log *.md
+prune agentsafe/node_modules
+global-exclude __pycache__ *.py[cod] .DS_Store

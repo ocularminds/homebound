@@ -1,0 +1,17 @@
+# Explicit public-source build context. No local configuration or household data.
+**
+!Dockerfile
+!pyproject.toml
+!README.md
+!LICENSE
+!requirements.lock
+!app/
+!app/**
+!agentsafe/
+!agentsafe/*.mjs
+!agentsafe/*.sh
+!agentsafe/package.json
+!agentsafe/package-lock.json
+app/**/__pycache__/
+app/**/*.pyc
+app/**/.env*

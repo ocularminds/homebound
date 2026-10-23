@@ -1,33 +1,84 @@
 # HomeBound
 
-> **Alexa can unlock your front door or disable your Ring camera—but should it?**
-> HomeBound puts a zero-trust execution boundary between AI requests and consequential home actions.
+**A Fire TV canvas for the right person, at the right moment.**
 
-An AI assistant can understand a request and choose a tool. That does not make the assistant an authority to operate a door, alarm, or camera. HomeBound sends each proposed action through Decionis Execution Authority before the local Ring simulator can execute it.
+HomeBound brings family notes, cooking help, scene shopping, and room previews
+into the shared living-room screen. Notes wait for a commercial, personal text
+stays private when a guest joins, and Amazon Bedrock interprets conversational
+requests against the current scene. An Alexa-style voice companion shares the
+same home state.
 
-The prototype now includes an **Alexa-style web simulator** following Amazon's recommendation while Alexa+ MCP access is unavailable. Its full-screen interface greets you for the home-local time, starts voice on load when the browser permits it, and keeps listening between spoken replies. Say “open the side gate,” “disable the alarm,” or “there's a delivery”; the assistant carries context through follow-up questions. A browser that requires an initial audio gesture shows **Start talking**. Conversation, device snapshots, and action evidence are available from compact controls. Start it with `python -m app.cli.web --with-services` after configuring the existing local stack, then open [localhost:8300](http://127.0.0.1:8300). See [web simulator setup](docs/web-simulator.md). Alexa+ itself remains unconnected; Deepgram, Bedrock, MCP, AgentSafe, and Decionis supply the governed request path.
+Built for **Build, Ship, Shape: Amazon Developer Hackathon**, with **Fire TV as
+the primary track** and Alexa+ as a complementary stack. The Amazon Vega app in
+[`apps/firetv`](apps/firetv/) loads the real canvas in WebView on Vega Virtual
+Device. Household signals and room controls are labelled simulations; Alexa+
+partner access remains unconnected.
 
-The **[FireTV ambient canvas](docs/firetv-canvas.md)** at [localhost:8300/tv](http://127.0.0.1:8300/tv) adds a shared visual surface. Tell Alexa “tell Mom I took the dog out,” then use **Demo signals → Mom** to reveal the note. An intense movie holds the text; a commercial break brings up the home dashboard; a guest's arrival hides personal notes. Ask about the cooking scene to match recipes against the pantry, or about the jacket to review a draft cart. “I want to read a book but keep the game on” previews a coordinated five-step room change. These are illustrated media and household simulations, with real Bedrock interpretation and optional Deepgram voice. The repository also includes an AgentCore HTTP supervisor, EventBridge/SQS transports, and a locally validated [CloudFormation deployment template](infra/firetv/ambient-canvas.yaml); that cloud stack is not deployed.
+![HomeBound running on Vega Virtual Device](docs/assets/submission-card.jpg)
 
-![The FireTV canvas displays Leo's sample reminder over an illustrated program](docs/assets/firetv-canvas.png)
+[Watch the 2:51 Fire TV demo](https://youtu.be/z0_36x-JmDA), recorded from the
+installed application on Amazon Vega Virtual Device.
+
+## Try it
+
+Use Python 3.12 or 3.13 and Node 22.23.2. Start a visual preview without cloud
+credentials:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-dev.lock
+.venv/bin/python -m pip install --no-deps -e .
+.venv/bin/python -m app.cli.web
+```
+
+Open [the TV canvas](http://127.0.0.1:8300/tv?play=park_chase). **Demo signals**
+selects the audience, scene, and pantry. Natural-language requests use a real
+Bedrock model and require the configuration in [deployment.md](docs/deployment.md).
+The alternative `docker compose up --build` packages the same preview on localhost.
+
+For the actual TV application, follow the [Vega setup and install steps](apps/firetv/README.md).
+The [submission guide](docs/submission/README.md) contains the judge walkthrough,
+source bundle, narration, product feedback, and verified status.
+
+## Everyday TV uses
+
+- A homework reminder appears during a commercial, with pause and exact resume.
+- A guest joining removes personal notes from the server's response.
+- “What are they cooking?” connects the illustrated scene to the demo pantry.
+- “I like that jacket” opens an item; a follow-up adds it to a draft cart.
+- “I want to read a book, but keep the game on” previews captions, audio, and lights.
+- The Alexa-style companion leaves a note that appears for its intended viewer.
+
+Catalog prices, pantry, audience, and room settings are demo data. No purchase,
+physical lighting change, third-party streaming overlay, or real device operation
+is represented as completed. See the [canvas behavior and boundaries](docs/firetv-canvas.md).
 
 ## Architecture
 
 ```text
-Interface      Alexa-style web simulator + Deepgram voice (or the CLI demo)
-       ↓
-Orchestration  Amazon Bedrock Converse (real tool-use integration; Alexa+ compatible MCP contract)
-       ↓
-Interception   Python MCP server → official Decionis AgentSafe executor
-       ↓
-Governance     Decionis Execution Authority → Decionis-managed Presence on escalation
-       ↓
-Execution      AgentSafe grant-bound dispatch → local Ring simulator
+Vega Fire TV app (WebView)        Alexa-style companion (optional Deepgram voice)
+                    \             /
+                Shared Python web service
+                          |
+             Amazon Bedrock Converse proposals
+                          |
+             Bounded Context / Media / Shopping
+                          |
+      Durable home state -> audience-filtered TV projection
 ```
 
-Alexa+ / Bedrock determines what the user wants. AgentSafe captures the proposed execution. Decionis decides whether the exact action is authorized. Ring executes only after authorization. The orchestration process has no Ring SDK, simulator token, or direct device path. The MCP server is a real Streamable HTTP server; the governance executor is the official [`@decionis/agentsafe`](https://www.npmjs.com/package/@decionis/agentsafe) package.
+The model proposes an interaction; deterministic code owns audience eligibility,
+expiry, playback transitions, and draft-cart totals. Private notes are filtered
+before reaching the TV. Optional AgentCore, EventBridge, SQS, Lambda, and
+published Guardrails infrastructure is supplied in
+[`infra/firetv`](infra/firetv/); see [current validation](docs/submission/status.md)
+for deployed versus packaged components.
 
-Decionis natively manages the Presence approval flow. HomeBound neither calls Presence directly nor stores a Presence API credential. For the current AgentSafe release, a trusted household approver identity is configured in the ignored executor settings; it is never accepted from an agent tool call.
+A separate governed device path remains available for future home integrations:
+Bedrock → MCP → official Decionis AgentSafe → Decionis authority → local Ring
+simulator. It verifies signed dossier evidence before simulated execution.
+Decionis manages Presence; HomeBound neither calls Presence directly nor stores
+its credentials. The sections below retain that integration's setup and history.
 
 ## Project phases
 
@@ -47,7 +98,7 @@ Work is delivered in stacked pull requests:
 12. [Phase 12 — Managed escalation interface](https://github.com/ocularminds/homebound/pull/16)
 13. [Phase 13 — FireTV ambient canvas and AWS supervisor](docs/firetv-canvas.md)
 
-## What the demo runs
+## Separate governed-device demonstration
 
 `python -m app.demo` starts the local AgentSafe executor and dossier archiver, Ring simulator, and MCP server. It then asks the configured Bedrock model to make exactly one MCP request for each scripted scenario. The model must preserve the fixture arguments; a mismatch stops the scenario before MCP. Outcomes still come from the configured Decionis tenant and policy—HomeBound does not hard-code a decision.
 
@@ -87,21 +138,22 @@ Parent emails are household configuration, not public Policy Exchange data. For 
 
 The simulator is not Ring hardware and does not contact Ring's API. It persists simulated device state, execution events, and replay fingerprints in a local SQLite database.
 
-## Run the live demo
+## Run the governed-device demonstration
 
-Requirements: Python 3.10+, Node.js 22.14+, AWS credentials permitted to call Bedrock Runtime, an enabled Converse tool-use model, a Decionis tenant/API key, and the household policy/approver configured in that tenant. The Python dependencies include `botocore[crt]` so boto3 can use AWS CLI `aws login` profiles.
+Requirements: Python 3.12+, Node.js 22.14+, AWS credentials permitted to call Bedrock Runtime, an enabled Converse tool-use model, a Decionis tenant/API key, and the household policy/approver configured in that tenant. The Python dependencies include `botocore[crt]` so boto3 can use AWS CLI `aws login` profiles.
 
 Install the Python package and create the local configuration files:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[dev]'
+python -m pip install -r requirements-dev.lock
+python -m pip install --no-deps -e .
 [ -f .env ] || cp .env.example .env
 [ -f agentsafe/.env ] || cp agentsafe/.env.example agentsafe/.env
 ```
 
-The checked-in example selects the `Decionis` AWS CLI profile and Amazon Nova Lite inference profile for `us-east-1`. Replace these values if using a different profile or enabled model. AWS previously returned an account-verification blocker before inference; the Bedrock path must be revalidated after AWS enables the account.
+The checked-in example selects the `Decionis` AWS CLI profile and Amazon Nova Lite inference profile for `us-east-1`. Replace these values if using a different profile or enabled model. The Nova Lite path was revalidated with a real scene request during submission preparation on 23 October 2026.
 
 ```bash
 aws login --region us-east-1 --profile Decionis
@@ -157,3 +209,8 @@ These tests use local fixtures for external Decionis and AWS responses; they do 
 ## Friction Log Summary
 
 Implementation issues and workarounds are tracked in [`friction-log/`](friction-log/). Policy Exchange remains a public playground artifact; production policy is org-scoped in Decionis Protocol, while HomeBound records a private home-to-org-policy binding and its version associations (FL-020, FL-027). Parent email-to-Accounts identity resolution and Presence `APPROVER` management remain in the Decionis workspace for this prototype (FL-022). Bedrock inference is active for the configured Nova Lite profile (FL-015). Alexa+ remains blocked on selected-partner and private registry access; the documented Amazon role assumption is denied for the provisioned IAM user (FL-028, FL-030). The live HomeBound bundle preserves existing Commerce rules. FL-023 records the rule-path and numeric-time corrections; exact policy-version pinning through the current AgentSafe package remains an upstream integration limitation. FL-025 and FL-026 record and resolve the live AgentSafe schema and dossier proof-packet contract mismatches. MCP context signals stay claims unless authenticated sources are connected (FL-019). The child rule matched in shadow mode, but the fresh live attempt failed closed before Presence (FL-029); no mock authority decisions or signatures are used.
+
+## License
+
+HomeBound original source code is available under the [MIT license](LICENSE).
+See [third-party notices and media provenance](THIRD_PARTY_NOTICES.md).
