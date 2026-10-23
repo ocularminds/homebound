@@ -1,10 +1,24 @@
 # Submission status - 23 October 2026
 
+HomeBound was submitted to the **Build, Ship, Shape: Amazon Developer Hackathon**
+on 23 October 2026 as **Decionis Inc (United States)**. Devpost confirmed
+"Project submitted!" before the 19:00 UTC deadline.
+
+- [Public submission](https://devpost.com/software/alexa-can-open-the-door-should-it)
+- Primary track: **Fire TV**; mini challenges: **AWS Builder** and **Open Source**.
+- [Final video](https://youtu.be/z0_36x-JmDA): 2:51, with captions.
+- Five gallery images are saved, with cartoon playback as picture 0 and the cover.
+- Uploaded judge bundle: `homebound-firetv-judge-bundle.zip`, 33,652,024 bytes.
+  SHA-256: `381b88e424a0819657316d11e537f41a8cfe58dbbe33d156b60c344082437069`.
+  It pins source commit `a74c80c8cada81d90dd7de1ac912185cccea1431` and includes
+  the three native Vega packages.
+
 ## Verified in this session
 
-- Local `master` fast-forwarded to `05005f1`, including merged Fire TV and
-  Runway media PRs #17 and #18. Work continues on
-  `codex/hackathon-deployment-packaging`.
+- [PR #19](https://github.com/ocularminds/homebound/pull/19) merged into `master`
+  as `ef8943bbd367e15bbe9aa15a6868dbf314dd6a87`; local `master` is synced.
+  GitHub detects the MIT license on the public default branch. The submission
+  branch is retained so the submitted source and setup links remain valid.
 - 204 Python tests pass, including source-bundle privacy and reproducibility
   checks. The pinned runtime was installed in a fresh environment.
 - 12 AgentSafe JavaScript tests and 20 browser JavaScript tests pass on Node 22.23.2.
@@ -49,6 +63,6 @@ locally checked. No cloud stack or end-to-end cloud deployment is claimed.
 - [x] Complete narration, simulator footage, captions, and the under-three-minute edit.
 - [x] Publish and verify [the public video](https://youtu.be/z0_36x-JmDA).
 - [x] Save the final video URL, source URL, and cartoon-first image gallery.
-- [x] Publish the latest code and verify public repository access. [PR #19](https://github.com/ocularminds/homebound/pull/19) passes GitHub CI.
+- [x] Publish and merge the latest code, verify public repository access and MIT detection, and pass both GitHub CI checks.
 - [x] Save Fire TV as the primary track, with AWS Builder and Open Source; Alexa is complementary.
-- [ ] Attach the final judge bundle and complete Devpost's final submission.
+- [x] Attach the final judge bundle and complete Devpost's final submission.
