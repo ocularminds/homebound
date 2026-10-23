@@ -14,6 +14,8 @@ rule CANVAS_LOGS_ENCRYPTED_AND_BOUNDED {
         Properties.KmsKeyId exists
         Properties.RetentionInDays <= 30
     }
+    Resources.RuntimeLogSource.Properties.LogType == 'USAGE_LOGS'
+    Resources.RuntimeLogDelivery.DependsOn == 'RuntimeLogPolicy'
 }
 
 rule CANVAS_QUEUES_ENCRYPTED_AND_RETAINED {
@@ -58,7 +60,11 @@ rule CANVAS_TRANSPORT_PRESERVES_ORDER {
 }
 
 rule CANVAS_CONSUMER_REQUIRES_EXPLICIT_ENABLE {
+    Parameters.CreateRuntimeEndpoint.Default == 'false'
     Parameters.EnableConsumer.Default == 'false'
+    Resources.SupervisorEndpoint.Condition == 'EndpointProvisioned'
+    Resources.SupervisorEndpoint.Properties.AgentRuntimeVersion == {'Ref': 'EndpointRuntimeVersion'}
+    Resources.WorkerSubscription.Condition == 'EndpointProvisioned'
     Resources.WorkerSubscription.Properties.Enabled == {
         'Fn::If': ['ConsumerEnabled', true, false]
     }
@@ -76,6 +82,10 @@ rule CANVAS_ROLE_PERMISSIONS_HAVE_NO_WILDCARD_ACTIONS {
 
 rule CANVAS_WORKER_ARTIFACT_IS_VERSIONED {
     Resources.Worker.Properties.Code.S3ObjectVersion exists
-    Resources.Worker.Properties.ReservedConcurrentExecutions <= 2
+    Parameters.ReserveWorkerConcurrency.Default == 'false'
+    Resources.Worker.Properties.ReservedConcurrentExecutions == {
+        'Fn::If': ['WorkerConcurrencyReserved', 2, {'Ref': 'AWS::NoValue'}]
+    }
+    Resources.WorkerSubscription.Properties.ScalingConfig.MaximumConcurrency == 2
     Resources.WorkerSubscription.Properties.FunctionResponseTypes == ['ReportBatchItemFailures']
 }

@@ -1,0 +1,55 @@
+# Foundation checks cover private networking and artifact/audit retention.
+let foundation_buckets = Resources.*[ Type == 'AWS::S3::Bucket' ]
+let foundation_logs = Resources.*[ Type == 'AWS::Logs::LogGroup' ]
+let foundation_subnets = Resources.*[ Type == 'AWS::EC2::Subnet' ]
+let public_routes = Resources.*[ Type in ['AWS::EC2::InternetGateway', 'AWS::EC2::NatGateway', 'AWS::EC2::Route'] ]
+let interface_endpoints = Resources.*[ Type == 'AWS::EC2::VPCEndpoint' Properties.VpcEndpointType == 'Interface' ]
+
+rule FOUNDATION_PRIVATE_NETWORK {
+    %public_routes empty
+    %foundation_subnets !empty
+    %foundation_subnets.Properties.MapPublicIpOnLaunch == false
+    Resources.Vpc.Properties.EnableDnsSupport == true
+    Resources.Vpc.Properties.EnableDnsHostnames == true
+    Resources.RuntimeSecurityGroup.Properties.SecurityGroupIngress empty
+    Resources.EndpointIngress.Properties.SourceSecurityGroupId == {'Ref': 'RuntimeSecurityGroup'}
+    %interface_endpoints !empty
+    %interface_endpoints {
+        Properties.PrivateDnsEnabled == true
+        Properties.PolicyDocument exists
+        Properties.SecurityGroupIds == [{'Ref': 'EndpointSecurityGroup'}]
+    }
+}
+
+rule FOUNDATION_ARTIFACTS_PRIVATE_ENCRYPTED_RETAINED {
+    %foundation_buckets !empty
+    %foundation_buckets {
+        DeletionPolicy == 'Retain'
+        UpdateReplacePolicy == 'Retain'
+        Properties.VersioningConfiguration.Status == 'Enabled'
+        Properties.BucketEncryption.ServerSideEncryptionConfiguration[*].ServerSideEncryptionByDefault.SSEAlgorithm == 'aws:kms'
+        Properties.PublicAccessBlockConfiguration {
+            BlockPublicAcls == true
+            BlockPublicPolicy == true
+            IgnorePublicAcls == true
+            RestrictPublicBuckets == true
+        }
+    }
+    Resources.Repository.Properties.ImageTagMutability == 'IMMUTABLE'
+    Resources.Repository.Properties.EncryptionConfiguration.EncryptionType == 'KMS'
+    Resources.Repository.Properties.ImageScanningConfiguration.ScanOnPush == true
+}
+
+rule FOUNDATION_AUDIT_ENABLED {
+    Resources.AuditTrail.Properties.IsLogging == true
+    Resources.AuditTrail.Properties.IsMultiRegionTrail == true
+    Resources.AuditTrail.Properties.EnableLogFileValidation == true
+    Resources.AuditTrail.Properties.KMSKeyId exists
+    %foundation_logs !empty
+    %foundation_logs {
+        DeletionPolicy == 'Retain'
+        UpdateReplacePolicy == 'Retain'
+        Properties.KmsKeyId exists
+        Properties.RetentionInDays <= 30
+    }
+}

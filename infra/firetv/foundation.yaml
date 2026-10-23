@@ -1,0 +1,474 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: HomeBound deployment foundation - private AWS connectivity, immutable artifacts and durable audit logging without a public listener or NAT gateway.
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+  com.aws.cloudformation.Context:
+    arch: Two private subnets -> scoped AWS interface endpoints and S3 gateway; retained encrypted artifacts and audit records.
+    must:
+      - This stack owns its VPC; do not alter shared household or application networking.
+      - Keep runtime ingress closed and outbound traffic restricted to AWS service endpoints.
+      - Retain artifacts and audit keys when removing compute infrastructure.
+    ref:
+      - at: docs/deployment.md
+        has: Deployment sequence, operating costs, verification and cleanup boundaries.
+Parameters:
+  VpcCidr:
+    Type: String
+    Default: 10.83.0.0/16
+    AllowedPattern: '(10\.[0-9]{1,3}\.0\.0|172\.(1[6-9]|2[0-9]|3[01])\.0\.0|192\.168\.0\.0)/16'
+  FirstAvailabilityZoneId:
+    Type: String
+    AllowedPattern: '[a-z0-9-]+-az[0-9]+'
+    Description: First AgentCore-supported Availability Zone ID in the deployment region.
+  SecondAvailabilityZoneId:
+    Type: String
+    AllowedPattern: '[a-z0-9-]+-az[0-9]+'
+    Description: A different AgentCore-supported Availability Zone ID.
+  S3PrefixListId:
+    Type: String
+    AllowedPattern: 'pl-[a-z0-9]+'
+    Description: AWS-managed regional S3 prefix list, discovered before deployment.
+  RuntimeName:
+    Type: String
+    Default: homebound_canvas
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9_]{0,47}'
+  ModelResourceArns:
+    Type: CommaDelimitedList
+    Description: Exact regional model and inference-profile ARNs used by the application.
+Resources:
+  ArtifactKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Separate retained build and audit encryption from the application data key.
+        must: [Keep the key while retained artifacts or audit logs exist.]
+    Properties:
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AccountAdministration
+            Effect: Allow
+            Principal: {AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'}
+            Action: kms:*
+            Resource: '*'
+          - Sid: EncryptFoundationLogs
+            Effect: Allow
+            Principal: {Service: !Sub 'logs.${AWS::Region}.amazonaws.com'}
+            Action: [kms:Encrypt, kms:Decrypt, kms:ReEncryptFrom, kms:ReEncryptTo, kms:GenerateDataKey, kms:DescribeKey]
+            Resource: '*'
+            Condition:
+              ArnLike:
+                kms:EncryptionContext:aws:logs:arn: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/homebound/${AWS::StackName}/*'
+          - Sid: EncryptAuditTrail
+            Effect: Allow
+            Principal: {Service: cloudtrail.amazonaws.com}
+            Action: kms:GenerateDataKey*
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${AWS::StackName}-audit'
+              StringLike:
+                kms:EncryptionContext:aws:cloudtrail:arn: !Sub 'arn:${AWS::Partition}:cloudtrail:*:${AWS::AccountId}:trail/${AWS::StackName}-audit'
+          - Sid: DescribeAuditKey
+            Effect: Allow
+            Principal: {Service: cloudtrail.amazonaws.com}
+            Action: kms:DescribeKey
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${AWS::StackName}-audit'
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Immutable version IDs make Lambda packages and deployment evidence reproducible.
+        must: [Private only, keep object versions needed for rollback.]
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: 'aws:kms', KMSMasterKeyID: !GetAtt ArtifactKey.Arn}
+            BucketKeyEnabled: true
+      VersioningConfiguration: {Status: Enabled}
+      OwnershipControls: {Rules: [{ObjectOwnership: BucketOwnerEnforced}]}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: IncompleteUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload: {DaysAfterInitiation: 7}
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Apply transport protection to every artifact version.
+        must: [Keep the non-TLS deny.]
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource: [!GetAtt ArtifactBucket.Arn, !Sub '${ArtifactBucket.Arn}/*']
+            Condition: {Bool: {aws:SecureTransport: 'false'}}
+  AuditBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Retain account management-event evidence beyond transient CloudTrail event history.
+        must: [Keep public access blocked, preserve delivered audit objects.]
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: 'aws:kms', KMSMasterKeyID: !GetAtt ArtifactKey.Arn}
+      VersioningConfiguration: {Status: Enabled}
+      OwnershipControls: {Rules: [{ObjectOwnership: BucketOwnerEnforced}]}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  AuditBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Only the named trail may deliver audit records through this service grant.
+        must: [Restrict the CloudTrail source ARN and account object prefix, require TLS.]
+    Properties:
+      Bucket: !Ref AuditBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: RequireTls
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource: [!GetAtt AuditBucket.Arn, !Sub '${AuditBucket.Arn}/*']
+            Condition: {Bool: {aws:SecureTransport: 'false'}}
+          - Sid: TrailAclCheck
+            Effect: Allow
+            Principal: {Service: cloudtrail.amazonaws.com}
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt AuditBucket.Arn
+            Condition:
+              StringEquals:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${AWS::StackName}-audit'
+          - Sid: TrailDelivery
+            Effect: Allow
+            Principal: {Service: cloudtrail.amazonaws.com}
+            Action: s3:PutObject
+            Resource: !Sub '${AuditBucket.Arn}/AWSLogs/${AWS::AccountId}/*'
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/${AWS::StackName}-audit'
+  AuditTrail:
+    Type: AWS::CloudTrail::Trail
+    DependsOn: AuditBucketPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Record deployment and IAM changes in a durable encrypted account audit trail.
+        must: [Keep integrity validation enabled; do not log model or household payloads.]
+    Properties:
+      TrailName: !Sub '${AWS::StackName}-audit'
+      IsLogging: true
+      IsMultiRegionTrail: true
+      IncludeGlobalServiceEvents: true
+      EnableLogFileValidation: true
+      S3BucketName: !Ref AuditBucket
+      KMSKeyId: !GetAtt ArtifactKey.Arn
+      EventSelectors:
+        - IncludeManagementEvents: true
+          ReadWriteType: All
+  Repository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Retained ARM64 releases are pinned by digest and cannot be overwritten.
+        must: [Do not expire a digest used by a deployed runtime or rollback release.]
+    Properties:
+      RepositoryName: !Sub '${AWS::StackName}-supervisor'
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration: {ScanOnPush: true}
+      EncryptionConfiguration: {EncryptionType: KMS, KmsKey: !GetAtt ArtifactKey.Arn}
+  Vpc:
+    Type: AWS::EC2::VPC
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Isolate the demo from the default VPC and avoid public or NAT routing.
+        must: [DNS support is required for private service endpoints.]
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags: [{Key: Name, Value: !Sub '${AWS::StackName}-private'}]
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZoneId: !Ref FirstAvailabilityZoneId
+      CidrBlock: !Select [0, !Cidr [!Ref VpcCidr, 2, 8]]
+      MapPublicIpOnLaunch: false
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZoneId: !Ref SecondAvailabilityZoneId
+      CidrBlock: !Select [1, !Cidr [!Ref VpcCidr, 2, 8]]
+      MapPublicIpOnLaunch: false
+  PrivateRoutes:
+    Type: AWS::EC2::RouteTable
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Local VPC routes plus S3 gateway access cover runtime dependencies.
+        must: [No default internet or NAT route.]
+    Properties: {VpcId: !Ref Vpc}
+  PrivateRouteA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: {SubnetId: !Ref PrivateSubnetA, RouteTableId: !Ref PrivateRoutes}
+  PrivateRouteB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: {SubnetId: !Ref PrivateSubnetB, RouteTableId: !Ref PrivateRoutes}
+  EndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Service endpoint listeners accept only the runtime security group.
+        must: [Replies are stateful; endpoints must not initiate external traffic.]
+    Properties:
+      GroupDescription: HomeBound private service endpoint access
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 127.0.0.1/32
+          Description: Suppress the default unrestricted outbound rule
+  RuntimeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: The runtime reaches AWS APIs and ECR layers through private endpoints only.
+        must: [No inbound listener, outbound HTTPS only to endpoint interfaces and regional S3.]
+    Properties:
+      GroupDescription: HomeBound supervisor private egress
+      VpcId: !Ref Vpc
+      SecurityGroupIngress: []
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          DestinationSecurityGroupId: !Ref EndpointSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          DestinationPrefixListId: !Ref S3PrefixListId
+  EndpointIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref EndpointSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref RuntimeSecurityGroup
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: ECR stores container layers in its regional S3 bucket; the gateway has no hourly charge.
+        must: [Allow only reads of the ECR layer bucket.]
+    Properties:
+      VpcId: !Ref Vpc
+      VpcEndpointType: Gateway
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      RouteTableIds: [!Ref PrivateRoutes]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub 'arn:${AWS::Partition}:s3:::prod-${AWS::Region}-starport-layer-bucket/*'
+  EcrApiEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Private ECR authorization and manifest access without internet routing.
+        must: [Restrict image reads to this repository and callers from this account.]
+    Properties:
+      VpcId: !Ref Vpc
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ecr.api'
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+      SecurityGroupIds: [!Ref EndpointSecurityGroup]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: ecr:GetAuthorizationToken
+            Resource: '*'
+            Condition: {StringEquals: {aws:PrincipalAccount: !Ref 'AWS::AccountId'}}
+          - Effect: Allow
+            Principal: '*'
+            Action: [ecr:BatchGetImage, ecr:GetDownloadUrlForLayer, ecr:BatchCheckLayerAvailability]
+            Resource: !GetAtt Repository.Arn
+            Condition: {StringEquals: {aws:PrincipalAccount: !Ref 'AWS::AccountId'}}
+  EcrDockerEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Pull the private container image through AWS PrivateLink.
+        must: [Restrict image reads to this repository and callers from this account.]
+    Properties:
+      VpcId: !Ref Vpc
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ecr.dkr'
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+      SecurityGroupIds: [!Ref EndpointSecurityGroup]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: [ecr:BatchGetImage, ecr:GetDownloadUrlForLayer, ecr:BatchCheckLayerAvailability]
+            Resource: !GetAtt Repository.Arn
+            Condition: {StringEquals: {aws:PrincipalAccount: !Ref 'AWS::AccountId'}}
+  BedrockEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Keep inference and content screening off public network routes.
+        must: [Exact model resources; runtime IAM further restricts the guardrail.]
+    Properties:
+      VpcId: !Ref Vpc
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.bedrock-runtime'
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+      SecurityGroupIds: [!Ref EndpointSecurityGroup]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: bedrock:InvokeModel
+            Resource: !Ref ModelResourceArns
+            Condition: {StringEquals: {aws:PrincipalAccount: !Ref 'AWS::AccountId'}}
+          - Effect: Allow
+            Principal: '*'
+            Action: bedrock:ApplyGuardrail
+            Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:guardrail/*'
+            Condition: {StringEquals: {aws:PrincipalAccount: !Ref 'AWS::AccountId'}}
+  LogsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Deliver runtime diagnostics without an internet route.
+        must: [Writes limited to this runtime log namespace.]
+    Properties:
+      VpcId: !Ref Vpc
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.logs'
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+      SecurityGroupIds: [!Ref EndpointSecurityGroup]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:DescribeLogStreams, logs:PutLogEvents]
+            Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/runtimes/${RuntimeName}-*:*'
+            Condition: {StringEquals: {aws:PrincipalAccount: !Ref 'AWS::AccountId'}}
+  FlowLogs:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Record accepted and rejected network flows for connectivity diagnosis.
+        must: [Encrypt and bound retention; never write application payloads.]
+    Properties:
+      LogGroupName: !Sub '/homebound/${AWS::StackName}/network'
+      KmsKeyId: !GetAtt ArtifactKey.Arn
+      RetentionInDays: 14
+  FlowLogRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Deliver VPC flow metadata to the dedicated group; DescribeLogGroups is discovery only.
+        must: [Scope log writes and trust only this account's flow-log service.]
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: vpc-flow-logs.amazonaws.com}
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals: {aws:SourceAccount: !Ref 'AWS::AccountId'}
+              ArnLike: {aws:SourceArn: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc-flow-log/*'}
+      Policies:
+        - PolicyName: DeliverNetworkLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:DescribeLogStreams, logs:PutLogEvents]
+                Resource: !GetAtt FlowLogs.Arn
+              - Effect: Allow
+                Action: logs:DescribeLogGroups
+                Resource: '*'
+  VpcFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref Vpc
+      TrafficType: ALL
+      LogDestinationType: cloud-watch-logs
+      LogGroupName: !Ref FlowLogs
+      DeliverLogsPermissionArn: !GetAtt FlowLogRole.Arn
+      MaxAggregationInterval: 60
+Outputs:
+  VpcId:
+    Description: Dedicated HomeBound VPC.
+    Value: !Ref Vpc
+  PrivateSubnetIds:
+    Description: Pass these private subnets to the application stack.
+    Value: !Join [',', [!Ref PrivateSubnetA, !Ref PrivateSubnetB]]
+  RuntimeSecurityGroupIds:
+    Description: Pass this outbound-only runtime security group to the application stack.
+    Value: !Ref RuntimeSecurityGroup
+  RepositoryUri:
+    Description: Push ARM64 releases with immutable version tags.
+    Value: !GetAtt Repository.RepositoryUri
+  RepositoryArn:
+    Description: Scope the application's image pull permission.
+    Value: !GetAtt Repository.Arn
+  ArtifactBucketName:
+    Description: Upload worker ZIPs and retain the returned S3 version IDs.
+    Value: !Ref ArtifactBucket
+  ArtifactKeyArn:
+    Description: Encrypt build artifacts and deployment evidence with this key.
+    Value: !GetAtt ArtifactKey.Arn
+  AuditTrailArn:
+    Description: Audit trail for deployment and account management operations.
+    Value: !GetAtt AuditTrail.Arn

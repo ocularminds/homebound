@@ -23,11 +23,12 @@ package:
 	$(PYTHON) scripts/build_submission.py
 
 canvas-image:
-	docker build --platform linux/arm64 -f infra/firetv/Dockerfile -t homebound-canvas:submission .
+	docker build --platform linux/arm64 --provenance=false -f infra/firetv/Dockerfile -t homebound-canvas:submission .
 
 canvas-worker:
 	$(PYTHON) scripts/build_canvas_worker.py
 
 validate-infra:
-	.homebound/cfn-tools/bin/cfn-lint --template infra/firetv/ambient-canvas.yaml --regions us-east-1 eu-west-1
+	.homebound/cfn-tools/bin/cfn-lint --template infra/firetv/ambient-canvas.yaml infra/firetv/foundation.yaml --regions us-east-1 eu-west-1
 	.homebound/cfn-guard/bin/cfn-guard validate --rules .homebound/aws-guard-rules --rules infra/firetv/canvas.guard --data infra/firetv/ambient-canvas.yaml --show-summary fail
+	.homebound/cfn-guard/bin/cfn-guard validate --rules .homebound/aws-guard-rules --rules infra/firetv/foundation.guard --data infra/firetv/foundation.yaml --show-summary fail

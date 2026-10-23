@@ -8,6 +8,16 @@ if [ -f .env ]; then
   . ./.env
   set +a
 fi
+if [ "${1:-}" = "--cloud" ]; then
+  shift
+  if [ ! -f .homebound/cloud-deployment/runtime.env ]; then
+    echo "Run scripts/configure_canvas_cloud.py for the deployed stack first." >&2
+    exit 2
+  fi
+  set -a
+  . ./.homebound/cloud-deployment/runtime.env
+  set +a
+fi
 HOMEBOUND_PYTHON="${HOMEBOUND_PYTHON:-$HOMEBOUND_SOURCE_ROOT/.venv/bin/python}"
 if [ ! -x "$HOMEBOUND_PYTHON" ]; then
   echo "Create the Python environment with make install first." >&2
