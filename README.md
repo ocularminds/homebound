@@ -14,9 +14,9 @@ the primary track** and Alexa+ as a complementary stack. The Amazon Vega app in
 Device. Household signals and room controls are labelled simulations; Alexa+
 partner access remains unconnected.
 
-![HomeBound's shared-screen canvas](docs/assets/firetv-canvas.png)
+![HomeBound running on Vega Virtual Device](docs/assets/submission-card.jpg)
 
-[Watch the 2:51 Fire TV demo](https://youtu.be/lGNDMxiiN_4), recorded from the
+[Watch the 2:51 Fire TV demo](https://youtu.be/z0_36x-JmDA), recorded from the
 installed application on Amazon Vega Virtual Device.
 
 ## Try it

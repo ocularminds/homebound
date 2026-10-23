@@ -1,7 +1,7 @@
 # HomeBound hackathon submission
 
 **Primary track: Fire TV.** Alexa+ supplies the complementary simulated voice
-experience. **Mini challenge: AWS Builder.**
+experience. **Mini challenges: AWS Builder and Open Source.**
 
 HomeBound is a shared TV canvas that adapts notes, recipes, shopping suggestions,
 and room previews to the audience and viewing moment.
@@ -11,6 +11,7 @@ and room previews to the audience and viewing moment.
 - [Project description](project-description.md): copy-ready project story.
 - [Product feedback](product-feedback.md): tooling feedback and linked friction logs.
 - [Narration](narration.md) and [capture plan](video-shot-list.md): Fire TV demo.
+- [Gallery](gallery.md): the playing cartoon first, then four feature screenshots.
 - [Project status](status.md): verified work and remaining submission gates.
 - [Deployment guide](../deployment.md): local runtime, containers, and AWS supervisor.
 - [Fire TV / Vega app](../../apps/firetv/README.md): build and run on the simulator.
@@ -26,7 +27,7 @@ YouTube/Vimeo demo under three minutes. Fire TV footage must show an actual
 Fire TV device or Vega Virtual Device. A desktop browser preview alone is
 insufficient. Keep the project available through judging.
 
-**[Watch the public demo (2:51)](https://youtu.be/lGNDMxiiN_4).** The installed
+**[Watch the public demo (2:51)](https://youtu.be/z0_36x-JmDA).** The installed
 Vega app was captured directly, with the owner's narration and readable captions.
 The cartoon is playing before the first note or companion interaction.
 

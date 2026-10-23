@@ -47,7 +47,8 @@ locally checked. No cloud stack or end-to-end cloud deployment is claimed.
 
 - [x] Run and capture the installed app on Vega Virtual Device.
 - [x] Complete narration, simulator footage, captions, and the under-three-minute edit.
-- [x] Publish and verify [the public video](https://youtu.be/lGNDMxiiN_4).
-- [ ] Add the video URL and final artifact links to the entry.
-- [ ] Publish the latest code and verify public repository access.
-- [ ] Submit Fire TV as the primary track, with AWS Builder; Alexa is complementary.
+- [x] Publish and verify [the public video](https://youtu.be/z0_36x-JmDA).
+- [x] Save the final video URL, source URL, and cartoon-first image gallery.
+- [x] Publish the latest code and verify public repository access. [PR #19](https://github.com/ocularminds/homebound/pull/19) passes GitHub CI.
+- [x] Save Fire TV as the primary track, with AWS Builder and Open Source; Alexa is complementary.
+- [ ] Attach the final judge bundle and complete Devpost's final submission.
