@@ -51,13 +51,36 @@ Parameters:
     Type: String
     MinLength: 1
     Description: Immutable S3 object version for the worker zip.
+  CreateRuntimeEndpoint:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Create the named endpoint only after the runtime version reports READY.
+  EndpointRuntimeVersion:
+    Type: String
+    Default: '1'
+    AllowedPattern: '([1-9][0-9]{0,4})'
+    Description: Verified READY runtime version; keep the previous value while an image update provisions.
   EnableConsumer:
     Type: String
     Default: 'false'
     AllowedValues: ['true', 'false']
     Description: Enable only after verifying runtime health, model access and log delivery.
+  ReserveWorkerConcurrency:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Reserve two executions only when the account can retain at least 100 unreserved executions; the SQS poller is always capped at two.
 Conditions:
+  EndpointProvisioned: !Equals [!Ref CreateRuntimeEndpoint, 'true']
   ConsumerEnabled: !Equals [!Ref EnableConsumer, 'true']
+  WorkerConcurrencyReserved: !Equals [!Ref ReserveWorkerConcurrency, 'true']
+Rules:
+  ConsumerRequiresEndpoint:
+    RuleCondition: !Equals [!Ref EnableConsumer, 'true']
+    Assertions:
+      - Assert: !Equals [!Ref CreateRuntimeEndpoint, 'true']
+        AssertDescription: Create and verify the canvas endpoint before enabling the consumer.
 Resources:
   DataKey:
     Type: AWS::KMS::Key
@@ -97,7 +120,9 @@ Resources:
             Resource: '*'
             Condition:
               ArnLike:
-                kms:EncryptionContext:aws:logs:arn: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/homebound/${AWS::StackName}/*
+                kms:EncryptionContext:aws:logs:arn:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/homebound/${AWS::StackName}/*
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/runtimes/${RuntimeName}-*
   AmbientBus:
     Type: AWS::EventsV2::EventBus
     DeletionPolicy: Retain
@@ -166,17 +191,53 @@ Resources:
     Type: AWS::SQS::QueuePolicy
     Metadata:
       com.aws.cloudformation.Context:
-        why: Require encrypted transport for every event queue.
-        must: [Keep the explicit non-TLS deny.]
+        why: Require encrypted transport for the input queue.
+        must: [SQS requires exactly one resource ARN per policy statement.]
     Properties:
-      Queues: [!Ref InputQueue, !Ref OutputQueue, !Ref DeliveryFailures, !Ref ProcessingFailures]
+      Queues: [!Ref InputQueue]
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Deny
             Principal: '*'
             Action: sqs:*
-            Resource: [!GetAtt InputQueue.Arn, !GetAtt OutputQueue.Arn, !GetAtt DeliveryFailures.Arn, !GetAtt ProcessingFailures.Arn]
+            Resource: !GetAtt InputQueue.Arn
+            Condition: {Bool: {aws:SecureTransport: 'false'}}
+  OutputQueueTlsPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref OutputQueue]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: sqs:*
+            Resource: !GetAtt OutputQueue.Arn
+            Condition: {Bool: {aws:SecureTransport: 'false'}}
+  DeliveryFailuresTlsPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref DeliveryFailures]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: sqs:*
+            Resource: !GetAtt DeliveryFailures.Arn
+            Condition: {Bool: {aws:SecureTransport: 'false'}}
+  ProcessingFailuresTlsPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref ProcessingFailures]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: sqs:*
+            Resource: !GetAtt ProcessingFailures.Arn
             Condition: {Bool: {aws:SecureTransport: 'false'}}
   DeliveryRole:
     Type: AWS::IAM::Role
@@ -298,12 +359,18 @@ Resources:
               - Effect: Allow
                 Action: [logs:CreateLogGroup, logs:DescribeLogStreams, logs:CreateLogStream, logs:PutLogEvents]
                 Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/runtimes/${RuntimeName}-*:*
+              - Effect: Allow
+                Action: logs:PutResourcePolicy
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/runtimes/${RuntimeName}-*
+              - Effect: Allow
+                Action: logs:DescribeLogGroups
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
   SupervisorRuntime:
     Type: AWS::BedrockAgentCore::Runtime
     Metadata:
       com.aws.cloudformation.Context:
         why: Custom HTTP supervisor reuses the same bounded agents as the local canvas.
-        must: [ARM64 container, IAM default inbound authorization, VPC egress reviewed before deployment., AWS SDK region matches the stack region.]
+        must: [ARM64 container, IAM default inbound authorization, VPC egress reviewed before deployment., AWS SDK region matches the stack region., Configure the platform-created diagnostic log groups before invoking or enabling the consumer.]
     Properties:
       AgentRuntimeName: !Ref RuntimeName
       AgentRuntimeArtifact: {ContainerConfiguration: {ContainerUri: !Ref ContainerImageUri}}
@@ -322,13 +389,14 @@ Resources:
         HOMEBOUND_CANVAS_GUARDRAIL_VERSION: !GetAtt PublishedGuardrail.Version
   SupervisorEndpoint:
     Type: AWS::BedrockAgentCore::RuntimeEndpoint
+    Condition: EndpointProvisioned
     Metadata:
       com.aws.cloudformation.Context:
         why: Pin a reviewable endpoint to the deployed runtime version.
         must: [Verify endpoint READY and health before enabling event delivery.]
     Properties:
       AgentRuntimeId: !GetAtt SupervisorRuntime.AgentRuntimeId
-      AgentRuntimeVersion: !GetAtt SupervisorRuntime.AgentRuntimeVersion
+      AgentRuntimeVersion: !Ref EndpointRuntimeVersion
       Name: canvas
       Description: HomeBound canvas supervisor endpoint
   RuntimeApplicationLogs:
@@ -337,7 +405,7 @@ Resources:
     UpdateReplacePolicy: Retain
     Metadata:
       com.aws.cloudformation.Context:
-        why: Encrypt application telemetry without putting household content in source code logs.
+        why: Encrypt usage telemetry without recording invocation payloads.
         must: [Do not enable raw model invocation logging for household notes.]
     Properties:
       LogGroupName: !Sub /homebound/${AWS::StackName}/supervisor
@@ -347,12 +415,12 @@ Resources:
     Type: AWS::Logs::DeliverySource
     Metadata:
       com.aws.cloudformation.Context:
-        why: Route AgentCore application logs to the encrypted destination.
-        must: [Keep all payload-bearing telemetry under the retained KMS key.]
+        why: Route AgentCore resource usage to the encrypted destination.
+        must: [Use USAGE_LOGS; APPLICATION_LOGS includes unscreened invocation payloads.]
     Properties:
       Name: !Sub ${AWS::StackName}-supervisor
       ResourceArn: !GetAtt SupervisorRuntime.AgentRuntimeArn
-      LogType: APPLICATION_LOGS
+      LogType: USAGE_LOGS
   RuntimeLogDestination:
     Type: AWS::Logs::DeliveryDestination
     Metadata:
@@ -365,6 +433,7 @@ Resources:
       OutputFormat: json
   RuntimeLogDelivery:
     Type: AWS::Logs::Delivery
+    DependsOn: RuntimeLogPolicy
     Metadata:
       com.aws.cloudformation.Context:
         why: Connect the supervised runtime's application logs to the destination.
@@ -372,6 +441,16 @@ Resources:
     Properties:
       DeliverySourceName: !Ref RuntimeLogSource
       DeliveryDestinationArn: !GetAtt RuntimeLogDestination.Arn
+  RuntimeLogPolicy:
+    Type: AWS::Logs::ResourcePolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Authorize same-account vended usage logs to the dedicated encrypted log group.
+        must: [Scope delivery to this account, region and destination.]
+    Properties:
+      PolicyName: !Sub ${AWS::StackName}-supervisor-delivery
+      PolicyDocument: !Sub |
+        {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"delivery.logs.amazonaws.com"},"Action":["logs:CreateLogStream","logs:PutLogEvents"],"Resource":"${RuntimeApplicationLogs.Arn}","Condition":{"StringEquals":{"aws:SourceAccount":"${AWS::AccountId}"},"ArnLike":{"aws:SourceArn":"arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*"}}}]}
   WorkerLogs:
     Type: AWS::Logs::LogGroup
     DeletionPolicy: Retain
@@ -412,7 +491,7 @@ Resources:
                 Action: bedrock-agentcore:InvokeAgentRuntime
                 Resource:
                   - !GetAtt SupervisorRuntime.AgentRuntimeArn
-                  - !GetAtt SupervisorEndpoint.AgentRuntimeEndpointArn
+                  - !Sub ${SupervisorRuntime.AgentRuntimeArn}/runtime-endpoint/canvas
               - Effect: Allow
                 Action: [kms:Decrypt, kms:GenerateDataKey]
                 Resource: !GetAtt DataKey.Arn
@@ -422,6 +501,9 @@ Resources:
   Worker:
     Type: AWS::Lambda::Function
     Metadata:
+      guard:
+        SuppressedRules: [LAMBDA_CONCURRENCY_CHECK]
+      ConcurrencyControl: The project guard validates the conditional two-execution reservation and SQS maximum concurrency. Small accounts cannot reserve concurrency while retaining the required 100 unreserved executions.
       com.aws.cloudformation.Context:
         why: SQS isolates model latency from the media stream; the worker transports data only.
         must: [Batch size one with partial failure reporting; no payload logging.]
@@ -436,7 +518,7 @@ Resources:
       Role: !GetAtt WorkerRole.Arn
       Timeout: 120
       MemorySize: 256
-      ReservedConcurrentExecutions: 2
+      ReservedConcurrentExecutions: !If [WorkerConcurrencyReserved, 2, !Ref 'AWS::NoValue']
       LoggingConfig: {LogGroup: !Ref WorkerLogs, LogFormat: JSON}
       Environment:
         Variables:
@@ -444,6 +526,7 @@ Resources:
           CANVAS_OUTPUT_QUEUE_URL: !Ref OutputQueue
   WorkerSubscription:
     Type: AWS::Lambda::EventSourceMapping
+    Condition: EndpointProvisioned
     DependsOn: SupervisorEndpoint
     Metadata:
       com.aws.cloudformation.Context:
@@ -454,13 +537,14 @@ Resources:
       FunctionName: !Ref Worker
       BatchSize: 1
       FunctionResponseTypes: [ReportBatchItemFailures]
+      ScalingConfig: {MaximumConcurrency: 2}
       Enabled: !If [ConsumerEnabled, true, false]
   WorkerErrorAlarm:
     Type: AWS::CloudWatch::Alarm
     Metadata:
       com.aws.cloudformation.Context:
         why: Surface invocation failures for the deployment operator.
-        must: [Wire notifications to an approved destination during deployment.]
+        must: [Keep the alarm active; add outbound notifications only with an approved destination.]
     Properties:
       AlarmDescription: HomeBound ambient worker invocation failures
       Namespace: AWS/Lambda
@@ -494,7 +578,7 @@ Resources:
     Metadata:
       com.aws.cloudformation.Context:
         why: Surface exhausted EventBridge deliveries separately from worker failures.
-        must: [Wire notifications to an approved destination during deployment.]
+        must: [Keep the alarm active; add outbound notifications only with an approved destination.]
     Properties:
       AlarmDescription: HomeBound ambient events exhausted delivery retries
       Namespace: AWS/SQS
@@ -507,6 +591,25 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
 Outputs:
+  RuntimeId:
+    Description: Runtime identifier for readiness and deployment diagnostics.
+    Value: !GetAtt SupervisorRuntime.AgentRuntimeId
+  RuntimeDefaultLogGroupName:
+    Description: Platform-owned diagnostics; configure encryption and retention before invoking.
+    Value: !Sub /aws/bedrock-agentcore/runtimes/${SupervisorRuntime.AgentRuntimeId}-DEFAULT
+  RuntimeEndpointLogGroupName:
+    Description: Named endpoint diagnostics; configure encryption and retention before invoking.
+    Value: !Sub /aws/bedrock-agentcore/runtimes/${SupervisorRuntime.AgentRuntimeId}-canvas
+  InputQueueUrl:
+    Description: Ordered input queue for delivery diagnostics.
+    Value: !Ref InputQueue
+  WorkerFunctionName:
+    Description: Worker used by the ordered event pipeline.
+    Value: !Ref Worker
+  ConsumerMappingId:
+    Condition: EndpointProvisioned
+    Description: Inspect this mapping before declaring the event consumer enabled.
+    Value: !Ref WorkerSubscription
   EventBusArn:
     Description: Configure the trusted event publisher with this V2 bus ARN.
     Value: !Ref AmbientBus
@@ -515,7 +618,7 @@ Outputs:
     Value: !GetAtt SupervisorRuntime.AgentRuntimeArn
   RuntimeEndpointArn:
     Description: Scope the home planner's invocation permission to this canvas endpoint.
-    Value: !GetAtt SupervisorEndpoint.AgentRuntimeEndpointArn
+    Value: !Sub ${SupervisorRuntime.AgentRuntimeArn}/runtime-endpoint/canvas
   OutputQueueUrl:
     Description: HOMEBOUND_CANVAS_EVENT_QUEUE_URL for the local canvas receiver.
     Value: !Ref OutputQueue
