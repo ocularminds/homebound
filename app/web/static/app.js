@@ -394,6 +394,8 @@ function voiceError(error) {
     ? "Allow microphone access in your browser, then choose Start talking. You can also type."
     : error.name === "NotFoundError"
     ? "No microphone was found. Connect one or use Type."
+    : error.name === "NotSupportedError" || error.message === "Not supported"
+    ? "Voice input is unavailable in this browser. Use Type, or open the companion in a browser with microphone support."
     : error.message);
 }
 const listener = new ContinuousVoiceListener({

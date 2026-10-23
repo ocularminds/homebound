@@ -224,3 +224,6 @@ node_modules/
 /audit/
 /.homebound/
 /.playwright-mcp/
+
+# Vega generated build metadata
+apps/firetv/buildinfo.json

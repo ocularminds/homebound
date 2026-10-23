@@ -1,0 +1,45 @@
+name: Submission checks and source package
+
+on:
+  push:
+    branches: [master, 'codex/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: agentsafe/package-lock.json
+      - name: Install pinned dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements-dev.lock
+          .venv/bin/python -m pip install --no-deps -e .
+          npm ci --prefix agentsafe
+      - name: Verify application and build source package
+        run: |
+          make check
+          make package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: homebound-submission
+          path: |
+            dist/homebound-submission.zip
+            dist/homebound-submission.zip.sha256
+            dist/homebound-submission.manifest.json
+          if-no-files-found: error

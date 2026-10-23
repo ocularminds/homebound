@@ -292,6 +292,18 @@ document.querySelectorAll(".close-dialog").forEach((item) => item.addEventListen
 
 // Directional remote navigation follows the screen geometry, not DOM order.
 document.addEventListener("keydown", (event) => {
+  if (["Escape", "GoBack", "BrowserBack"].includes(event.key)) {
+    const dialog = document.querySelector("dialog[open]");
+    if (dialog || state.canvas?.panel) {
+      event.preventDefault(); event.stopPropagation();
+      if (dialog) dialog.close(); else action("dismiss");
+    }
+    return;
+  }
+  if (event.key === "MediaPlayPause") {
+    if (state.canvas?.media.stream) { event.preventDefault(); player.toggle(); }
+    return;
+  }
   if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
   const active = document.activeElement;
   if (["INPUT", "TEXTAREA", "SELECT"].includes(active?.tagName)) return;

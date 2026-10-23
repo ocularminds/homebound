@@ -1,0 +1,25 @@
+services:
+  homebound:
+    build: .
+    image: homebound-demo:submission
+    init: true
+    ports:
+      - "127.0.0.1:8300:8300"
+    environment:
+      HOMEBOUND_ENV: development
+      HOMEBOUND_HOME_TIMEZONE: Europe/Stockholm
+      HOMEBOUND_CANVAS_DB: /srv/homebound/.homebound/canvas.sqlite3
+    volumes:
+      - homebound-state:/srv/homebound/.homebound
+      - homebound-audit:/srv/homebound/audit
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  homebound-state:
+  homebound-audit:

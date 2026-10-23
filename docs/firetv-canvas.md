@@ -2,7 +2,7 @@
 
 HomeBound turns a living-room screen into a context-sensitive companion: the right note for the person present, a recipe that accounts for the pantry, or a quiet view of home during a break. The implementation lives at `/tv`, alongside the Alexa-style voice screen at `/`.
 
-This is a browser prototype with original illustrated scenes and a Runway-generated 3D cartoon. Bedrock interpretation and the configured Deepgram speech service are real. Ring/Alexa+ sensors, physical FireTV playback, camera video, weather, commercial detection, product offers, and Amazon Pay are not connected. The AWS supervisor and transports are implemented and tested with service fixtures, with infrastructure supplied for a separate deployment.
+The canvas runs in an installable Amazon Vega WebView app and in desktop browsers, with original illustrated scenes and a Runway-generated 3D cartoon. The Vega Virtual Device run was verified on 23 October 2026; see [Fire TV setup](../apps/firetv/README.md). Bedrock interpretation and the configured Deepgram speech service are real. Ring/Alexa+ sensors, physical FireTV playback, camera video, weather, commercial detection, product offers, and Amazon Pay are not connected. The AWS supervisor and transports are implemented and tested with service fixtures, with infrastructure supplied for a separate deployment.
 
 ## Try the experience
 
@@ -62,7 +62,7 @@ submitted prompts, timing, and export checksums.
 All five exports are included under `app/web/static/media/`: `park-chase.mp4`,
 `park-chase-poster.jpg`, `park-chase.vtt`, `movie-night-ad.mp4`, and
 `popcorn-ad.mp4`. The 60-second program and two six-second promos use 1280×720,
-24 fps H.264 video and stereo AAC audio. The soundtrack contains original music
+24 fps H.264 Constrained Baseline video (one reference frame, no B frames) and stereo AAC audio. This compatibility export avoids a playback stall observed in Vega Virtual Device with the original multi-reference encode. The soundtrack contains original music
 and comic effects, including the bulldog's tire-screech stop and panting.
 English sound captions and a poster accompany the program. The selector falls
 back to “Film being prepared” if any required export is missing or empty.

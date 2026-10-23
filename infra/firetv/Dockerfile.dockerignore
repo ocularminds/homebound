@@ -1,6 +1,9 @@
 # The runtime build context contains source and public assets only.
 **
 !pyproject.toml
+!README.md
+!LICENSE
+!requirements.lock
 !app/
 !app/**
 app/**/__pycache__/

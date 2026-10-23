@@ -122,6 +122,11 @@ def main() -> None:
         action="store_true",
         help="Also start the configured AgentSafe, archive, Ring simulator, and MCP services.",
     )
+    parser.add_argument(
+        "--container",
+        action="store_true",
+        help="Listen inside Docker; publish the web port to host loopback only.",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
     settings = Settings.from_environment()
@@ -137,7 +142,14 @@ def main() -> None:
         logging.getLogger("homebound.web").info(
             "Alexa web simulator: http://%s:%d", web_settings.host, web_settings.port
         )
-        uvicorn.run(application, host=web_settings.host, port=web_settings.port, access_log=False)
+        # Docker forwards through its network interface. Host/Origin validation
+        # still admits only localhost; no MCP or execution port is published.
+        uvicorn.run(
+            application,
+            host="0.0.0.0" if args.container else web_settings.host,
+            port=web_settings.port,
+            access_log=False,
+        )
     finally:
         if services is not None:
             services.stop()

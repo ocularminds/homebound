@@ -7,11 +7,13 @@
     "width": 1280,
     "height": 720,
     "fps": 24,
-    "video_codec": "H.264 High / yuv420p",
+    "video_codec": "H.264 Constrained Baseline level 3.1 / yuv420p",
     "audio_codec": "AAC LC",
     "audio_sample_rate": 48000,
     "audio_channels": 2,
-    "fast_start": true
+    "fast_start": true,
+    "reference_frames": 1,
+    "b_frames": 0
   },
   "program_edit": [
     {
@@ -167,7 +169,7 @@
     "program_seconds": 60,
     "with_commercials_seconds": 72,
     "notes": "Rendered live by the audience-filtered FireTV canvas during commercials only; no notes are baked into the media.",
-    "target": "HomeBound browser FireTV canvas; no physical casting adapter."
+    "target": "HomeBound Fire TV canvas in the Amazon Vega Virtual Device and desktop browsers; no physical casting adapter."
   },
   "editorial_notes": [
     "Nine selected shots preserve the original park, train, chase, family, and rabbit ending.",
@@ -179,35 +181,26 @@
   "outputs": [
     {
       "path": "app/web/static/media/park-chase.mp4",
-      "bytes": 21528983,
-      "sha256": "c6e29b3e4aaf079b544d2646322c27bd940d3f3d8150f95a1fedc2eeec628048",
+      "bytes": 27487024,
+      "sha256": "bf942eda098379b83bb6ba5e1b289bf85851742b94c023ebb9ee033c9d16c412",
       "duration_seconds": 60,
       "video_frames": 1440,
-      "mean_audio_dbfs": -23.2,
-      "sample_peak_dbfs": -1.2,
-      "true_peak_dbfs": -1.1,
       "full_decode": "passed"
     },
     {
       "path": "app/web/static/media/movie-night-ad.mp4",
-      "bytes": 1261815,
-      "sha256": "85cc8c91bf505289e96f92b4ee672e731f9a6bdd69e55bfb20c4feb2bd33202e",
+      "bytes": 1271773,
+      "sha256": "ba100b36d0d63dd2e2735f5d76baff7a41eb661f0478c080bae737ade8679a56",
       "duration_seconds": 6,
       "video_frames": 144,
-      "mean_audio_dbfs": -20.0,
-      "sample_peak_dbfs": -6.3,
-      "true_peak_dbfs": -6.3,
       "full_decode": "passed"
     },
     {
       "path": "app/web/static/media/popcorn-ad.mp4",
-      "bytes": 970501,
-      "sha256": "8c0407015cdea3adcc73738c971c43bfc26af7386b6fd856d854651abe0b6290",
+      "bytes": 1322528,
+      "sha256": "dd8dfb6edbb5d1ed47880941cd5b5f8cf0ab2057bf942490fdc56223a6766c5a",
       "duration_seconds": 6,
       "video_frames": 144,
-      "mean_audio_dbfs": -18.7,
-      "sample_peak_dbfs": -6.3,
-      "true_peak_dbfs": -6.3,
       "full_decode": "passed"
     },
     {
@@ -611,5 +604,10 @@
       },
       "start_frame": "frame_ad_popcorn"
     }
-  ]
+  ],
+  "compatibility_export": {
+    "date": "2026-10-23",
+    "reason": "Avoid Vega Virtual Device decoder stalls with multi-reference H.264 streams. Re-encode the same edit as 720p24 Constrained Baseline, one reference frame, no B frames, AAC stereo; retain the original artwork, shot timing, soundtrack, and commercial cues.",
+    "ffmpeg_options": "-c:v libx264 -profile:v baseline -level 3.1 -pix_fmt yuv420p -preset ultrafast -crf 24 -g 48 -c:a aac -b:a 128k -ar 48000 -movflags +faststart"
+  }
 }

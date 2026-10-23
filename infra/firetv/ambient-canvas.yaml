@@ -303,7 +303,7 @@ Resources:
     Metadata:
       com.aws.cloudformation.Context:
         why: Custom HTTP supervisor reuses the same bounded agents as the local canvas.
-        must: [ARM64 container, IAM default inbound authorization, VPC egress reviewed before deployment.]
+        must: [ARM64 container, IAM default inbound authorization, VPC egress reviewed before deployment., AWS SDK region matches the stack region.]
     Properties:
       AgentRuntimeName: !Ref RuntimeName
       AgentRuntimeArtifact: {ContainerConfiguration: {ContainerUri: !Ref ContainerImageUri}}
@@ -316,6 +316,7 @@ Resources:
           Subnets: !Ref PrivateSubnetIds
           SecurityGroups: !Ref RuntimeSecurityGroupIds
       EnvironmentVariables:
+        AWS_REGION: !Ref AWS::Region
         BEDROCK_MODEL_ID: !Ref ModelId
         HOMEBOUND_CANVAS_GUARDRAIL_ID: !GetAtt CanvasGuardrail.GuardrailId
         HOMEBOUND_CANVAS_GUARDRAIL_VERSION: !GetAtt PublishedGuardrail.Version
@@ -512,6 +513,9 @@ Outputs:
   RuntimeArn:
     Description: HOMEBOUND_CANVAS_RUNTIME_ARN for remote conversation planning.
     Value: !GetAtt SupervisorRuntime.AgentRuntimeArn
+  RuntimeEndpointArn:
+    Description: Scope the home planner's invocation permission to this canvas endpoint.
+    Value: !GetAtt SupervisorEndpoint.AgentRuntimeEndpointArn
   OutputQueueUrl:
     Description: HOMEBOUND_CANVAS_EVENT_QUEUE_URL for the local canvas receiver.
     Value: !Ref OutputQueue
